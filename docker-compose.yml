@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: chess-db
+    environment:
+      POSTGRES_DB: chess_sessions
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - chess_pg_data:/var/lib/postgresql/data
+
+  server:
+    build:
+      context: ./server
+    container_name: chess-server
+    environment:
+      PORT: 5000
+      DB_NAME: chess_sessions
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: db
+      DB_PORT: 5432
+      PUBLIC_URL: http://localhost:5000
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+
+volumes:
+  chess_pg_data:

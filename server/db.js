@@ -8,30 +8,47 @@ const pool = new Pool({
     database: process.env.DB_NAME || 'chess_sessions',
     user: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASSWORD || 'postgres',
+    // Таймаут подключения
+    connectionTimeoutMillis: 5000,
 });
 
 /**
- * Инициализация таблиц в базе данных.
- * Выполняется при старте сервера.
+ * Инициализация таблиц с повторными попытками.
  */
-export async function initDatabase() {
-    const client = await pool.connect();
-    try {
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS sessions (
-                id SERIAL PRIMARY KEY,
-                status VARCHAR(20) DEFAULT 'active',
-                fen VARCHAR(100) DEFAULT 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-                moves TEXT[] DEFAULT '{}',
-                result VARCHAR(20),
-                duration INTEGER,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                completed_at TIMESTAMP WITH TIME ZONE
+export async function initDatabase(retries = 10, delay = 2000) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            const client = await pool.connect();
+            try {
+                await client.query(`
+                    CREATE TABLE IF NOT EXISTS sessions (
+                        id SERIAL PRIMARY KEY,
+                        status VARCHAR(20) DEFAULT 'active',
+                        fen VARCHAR(100) DEFAULT 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+                        moves TEXT[] DEFAULT '{}',
+                        result VARCHAR(20),
+                        duration INTEGER,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        completed_at TIMESTAMP WITH TIME ZONE
+                    );
+                `);
+                console.log('Таблица sessions готова');
+                return; // Успех — выходим
+            } finally {
+                client.release();
+            }
+        } catch (error) {
+            console.error(
+                `Попытка ${attempt}/${retries}: БД не готова (${error.message})`
             );
-        `);
-        console.log('Таблица sessions готова');
-    } finally {
-        client.release();
+            if (attempt === retries) {
+                throw new Error(
+                    `Не удалось подключиться к БД после ${retries} попыток`
+                );
+            }
+            // Ждём перед следующей попыткой
+            await new Promise((resolve) => setTimeout(resolve, delay));
+        }
     }
 }
 
