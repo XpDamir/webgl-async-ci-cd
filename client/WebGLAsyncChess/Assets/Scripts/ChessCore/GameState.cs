@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace ChessCore
@@ -12,6 +13,9 @@ namespace ChessCore
 
         private BoardPosition? selectedPiece;
         private List<Move> currentLegalMoves = new List<Move>();
+
+        // Событие, которое будет срабатывать при совершении хода на клиенте
+        public event Action<Move> OnMoveExecuted;
 
         public GameState()
         {
@@ -42,14 +46,28 @@ namespace ChessCore
 
             var move = currentLegalMoves.First(m => m.To.X == x && m.To.Y == y);
 
-            var piece = Board.GetPiece(selectedPiece.Value.X, selectedPiece.Value.Y);
-            Board.SetPiece(x, y, piece);
-            Board.SetPiece(selectedPiece.Value.X, selectedPiece.Value.Y, Piece.Empty);
+            ExecuteLocalMove(move);
+
+            // Оповещаем сетевой менеджер о совершенном ходе
+            OnMoveExecuted?.Invoke(move);
+
+            return true;
+        }
+
+        /// <summary>
+        /// Выполняет ход локально на доске без вызова события сетевой синхронизации
+        /// </summary>
+        public void ExecuteLocalMove(Move move)
+        {
+            var piece = Board.GetPiece(move.From.X, move.From.Y);
+            Board.SetPiece(move.To.X, move.To.Y, piece);
+            Board.SetPiece(move.From.X, move.From.Y, Piece.Empty);
 
             CurrentTurn = (CurrentTurn == PieceColor.White) ? PieceColor.Black : PieceColor.White;
             selectedPiece = null;
             currentLegalMoves.Clear();
-            return true;
+
+            Record.AddMove(move);
         }
     }
 }

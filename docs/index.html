@@ -127,5 +127,32 @@
       document.body.appendChild(script);
 
     </script>
+    <script type="module">
+      import {
+          createSession,
+          sendMove,
+          requestBotMove,
+          getSession,
+          getLastCompletedSession,
+          pollForBotMove,
+      } from './api.js';
+
+      // Пример использования:
+      // 1. Создать сессию при старте игры
+      // 2. После каждого хода игрока вызывать sendMove()
+      // 3. Когда нужен ход бота — requestBotMove(), затем pollForBotMove()
+
+      // Делаем функции доступными глобально для отладки
+      window.api = {
+          createSession,
+          sendMove,
+          requestBotMove,
+          getSession,
+          getLastCompletedSession,    
+          pollForBotMove,
+      };
+
+      console.log('API модуль загружен. Используйте window.api в консоли.');
+    </script>
   </body>
 </html>

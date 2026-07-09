@@ -1,4 +1,5 @@
 using UnityEngine;
+using ChessCore;
 
 public class BoardView2D : MonoBehaviour
 {
@@ -8,46 +9,44 @@ public class BoardView2D : MonoBehaviour
     public Color highlightColor = Color.green;
 
     private ChessTile[,] tiles = new ChessTile[8, 8];
+    private Transform tilesContainer;
 
     public void Generate()
     {
-        Debug.Log("BoardView: Попытка создания 64 клеток...");
-
-        if (tilePrefab == null)
+        // Создаем или очищаем контейнер клеток
+        if (tilesContainer == null)
         {
-            Debug.LogError("КРИТИЧЕСКАЯ ОШИБКА: Tile Prefab не назначен в Инспекторе!");
-            return;
+            GameObject go = new GameObject("TilesContainer");
+            tilesContainer = go.transform;
+            tilesContainer.SetParent(this.transform);
+            tilesContainer.localPosition = Vector3.zero;
+        }
+
+        // Очистка старых клеток (через Immediate)
+        for (int i = tilesContainer.childCount - 1; i >= 0; i--)
+        {
+            DestroyImmediate(tilesContainer.GetChild(i).gameObject);
         }
 
         for (int x = 0; x < 8; x++)
         {
             for (int y = 0; y < 8; y++)
             {
-                try
+                GameObject obj = Instantiate(tilePrefab, new Vector3(x, y, 0), Quaternion.identity, tilesContainer);
+                obj.name = $"Tile_{x}_{y}";
+
+                ChessTile tile = obj.GetComponent<ChessTile>();
+                if (tile != null) tile.Init(x, y);
+
+                SpriteRenderer rend = obj.GetComponent<SpriteRenderer>();
+                if (rend != null)
                 {
-                    GameObject obj = Instantiate(tilePrefab, new Vector3(x, y, 0), Quaternion.identity);
-                    obj.name = $"Tile_{x}_{y}";
-
-                    ChessTile tile = obj.GetComponent<ChessTile>();
-                    if (tile != null) tile.Init(x, y);
-
-                    SpriteRenderer rend = obj.GetComponent<SpriteRenderer>();
-                    if (rend != null)
-                    {
-                        rend.sortingOrder = 0;
-                        rend.color = (x + y) % 2 != 0 ? whiteColor : blackColor;
-                        if (rend.sprite == null) Debug.LogWarning($"У Tile_{x}_{y} нет спрайта!");
-                    }
-
-                    tiles[x, y] = tile;
+                    rend.sortingOrder = 0;
+                    rend.color = (x + y) % 2 != 0 ? whiteColor : blackColor;
                 }
-                catch (System.Exception e)
-                {
-                    Debug.LogError($"Ошибка на клетке {x}:{y}: " + e.Message);
-                }
+                tiles[x, y] = tile;
             }
         }
-        Debug.Log("BoardView: Цикл генерации завершен.");
     }
 
     public void HighlightTile(int x, int y, bool highlight)
