@@ -8,6 +8,9 @@ on:
     branches:
       - main
 
+env:
+  ACTIONS_ALLOW_USE_UNOFFICIAL_NODE_VERSION: '1'
+
 jobs:
   lint:
     name: Lint (ESLint)
