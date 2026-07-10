@@ -8,7 +8,7 @@
     "start": "node index.js",
     "dev": "nodemon index.js",
     "check": "node --check index.js",
-    "test": "node --test --test-reporter spec",
+    "test": "node --test --test-reporter tap --test-force-exit",
     "lint": "eslint ."
   },
   "dependencies": {
