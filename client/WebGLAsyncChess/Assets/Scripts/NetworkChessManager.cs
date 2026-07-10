@@ -9,7 +9,7 @@ using ChessCore;
 public class NetworkChessManager : MonoBehaviour
 {
     [Header("API Settings")]
-    [SerializeField] private string serverUrl = "http://localhost:5000";
+    [SerializeField] private string serverUrl = "https://webgl-async-ci-cd-production.up.railway.app";
 
     [Header("UI Roots")]
     [SerializeField] private GameObject menuPanel;   // Панель с кнопкой "Играть"
@@ -31,7 +31,7 @@ public class NetworkChessManager : MonoBehaviour
 
         // Автоопределение: если запущено в браузере не на localhost — используем продакшен
 #if UNITY_WEBGL && !UNITY_EDITOR
-        serverUrl = "https://ваш-сервер.up.railway.app"; // Замените на реальный URL после деплоя
+        serverUrl = "https://webgl-async-ci-cd-production.up.railway.app"; // Замените на реальный URL после деплоя
 #endif
     }
 
