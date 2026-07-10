@@ -5,6 +5,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.UI;
 using ChessCore;
+using System.Reflection;
 
 public class NetworkChessManager : MonoBehaviour
 {
@@ -12,8 +13,8 @@ public class NetworkChessManager : MonoBehaviour
     [SerializeField] private string serverUrl = "https://webgl-async-ci-cd-production.up.railway.app";
 
     [Header("UI Roots")]
-    [SerializeField] private GameObject menuPanel;   // Панель с кнопкой "Играть"
-    [SerializeField] private GameObject gameUIPanel; // Панель с кнопкой бота и статусом
+    [SerializeField] private GameObject menuPanel;
+    [SerializeField] private GameObject gameUIPanel;
 
     [Header("UI References")]
     [SerializeField] private Button newGameButton;
@@ -28,32 +29,18 @@ public class NetworkChessManager : MonoBehaviour
     private void Awake()
     {
         controller = GetComponent<ChessGameController2D>();
-
-        // Автоопределение: если запущено в браузере не на localhost — используем продакшен
-#if UNITY_WEBGL && !UNITY_EDITOR
-        serverUrl = "https://webgl-async-ci-cd-production.up.railway.app"; // Замените на реальный URL после деплоя
-#endif
     }
 
     private void Start()
     {
-        // Изначальное состояние: меню включено, интерфейс игры выключен
+        // Начальное состояние интерфейса
         if (menuPanel != null) menuPanel.SetActive(true);
         if (gameUIPanel != null) gameUIPanel.SetActive(false);
 
-        // Скрываем доску до начала игры (если она уже создана контроллером)
-        //SetBoardVisibility(false);
-
-        // Подписка на кнопки
         if (newGameButton != null) newGameButton.onClick.AddListener(CreateNewGame);
         if (botMoveButton != null) botMoveButton.onClick.AddListener(RequestBotMove);
 
         UpdateUIState();
-
-        if (controller != null && controller.Game != null)
-        {
-            controller.Game.OnMoveExecuted += HandleOnMoveExecuted;
-        }
     }
 
     private void OnDestroy()
@@ -64,57 +51,12 @@ public class NetworkChessManager : MonoBehaviour
         }
     }
 
-    #region Visibility Logic
-
-    private void SetBoardVisibility(bool visible)
-    {
-        // Находим все префабы клеток и фигур на сцене и скрываем/показываем их
-        // Это костыль, так как контроллер уже запустил генерацию в своем Start()
-        var tiles = GameObject.FindObjectsOfType<ChessTile>(true);
-        foreach (var t in tiles) t.gameObject.SetActive(visible);
-
-        var pieces = GameObject.FindObjectsOfType<PieceView>(true);
-        foreach (var p in pieces) p.gameObject.SetActive(visible);
-    }
-
-    private void SwitchToGameUI()
-    {
-        if (menuPanel != null) menuPanel.SetActive(false);
-        if (gameUIPanel != null) gameUIPanel.SetActive(true);
-        SetBoardVisibility(true);
-    }
-
-    #endregion
-
-    #region API Logic
+    #region Game Initialization
 
     public void CreateNewGame()
     {
         StartCoroutine(CreateSessionCoroutine());
     }
-
-    public void RequestBotMove()
-    {
-        if (currentSessionId.HasValue && !isWaitingForBot)
-        {
-            StartCoroutine(RequestBotMoveCoroutine(currentSessionId.Value));
-        }
-    }
-
-    private void HandleOnMoveExecuted(Move move)
-    {
-        localMovesCount++;
-        if (currentSessionId.HasValue)
-        {
-            string moveString = ConvertMoveToString(move);
-            StartCoroutine(SendMoveCoroutine(currentSessionId.Value, moveString));
-        }
-        UpdateUIState(); // Обновляем кнопки сразу после хода игрока
-    }
-
-    #endregion
-
-    #region Coroutines
 
     private IEnumerator CreateSessionCoroutine()
     {
@@ -137,18 +79,54 @@ public class NetworkChessManager : MonoBehaviour
 
                 RestartLocalGame();
                 controller.InitializeBoard();
-                SwitchToGameUI(); // ПЕРЕКЛЮЧАЕМ ЭКРАН ТУТ
-                UpdateStatusText($"Сессия {currentSessionId} начата.");
+
+                if (menuPanel != null) menuPanel.SetActive(false);
+                if (gameUIPanel != null) gameUIPanel.SetActive(true);
+
+                UpdateStatusText($"Игра началась! ID: {currentSessionId}");
             }
             else
             {
-                UpdateStatusText($"Ошибка: {request.error}");
+                UpdateStatusText($"Ошибка подключения: {request.error}");
             }
         }
         UpdateUIState();
     }
 
-    // Остальные корутины (SendMove, RequestBotMove, PollSession) остаются такими же
+    private void RestartLocalGame()
+    {
+        if (controller != null)
+        {
+            if (controller.Game != null)
+                controller.Game.OnMoveExecuted -= HandleOnMoveExecuted;
+
+            // Создаем новый GameState
+            GameState newGame = new GameState();
+
+            // Записываем его в контроллер через рефлексию (так как сеттер приватный)
+            var field = typeof(ChessGameController2D).GetField("<Game>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field != null) field.SetValue(controller, newGame);
+
+            newGame.OnMoveExecuted += HandleOnMoveExecuted;
+            if (controller.spawner != null) controller.spawner.Game = newGame;
+        }
+    }
+
+    #endregion
+
+    #region Player Move Handling
+
+    private void HandleOnMoveExecuted(Move move)
+    {
+        // ВНИМАНИЕ: localMovesCount НЕ увеличиваем здесь. 
+        // Ждем подтверждения от сервера в SendMoveCoroutine.
+        if (currentSessionId.HasValue)
+        {
+            string moveString = ConvertMoveToString(move);
+            StartCoroutine(SendMoveCoroutine(currentSessionId.Value, moveString));
+        }
+    }
+
     private IEnumerator SendMoveCoroutine(int sessionId, string moveStr)
     {
         string url = $"{serverUrl}/api/sessions/{sessionId}";
@@ -160,7 +138,32 @@ public class NetworkChessManager : MonoBehaviour
             request.uploadHandler = new UploadHandlerRaw(bodyData);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
+
             yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                // Сервер подтвердил ход, теперь синхронизируем счетчик
+                localMovesCount++;
+                Debug.Log($"[NetworkChess] Ход {moveStr} подтвержден сервером. localMovesCount: {localMovesCount}");
+                UpdateUIState();
+            }
+            else
+            {
+                UpdateStatusText("Ошибка синхронизации хода.");
+            }
+        }
+    }
+
+    #endregion
+
+    #region Bot Move Handling
+
+    public void RequestBotMove()
+    {
+        if (currentSessionId.HasValue && !isWaitingForBot)
+        {
+            StartCoroutine(RequestBotMoveCoroutine(currentSessionId.Value));
         }
     }
 
@@ -176,22 +179,30 @@ public class NetworkChessManager : MonoBehaviour
             request.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes("{}"));
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
+
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
+            {
                 StartCoroutine(PollSessionStateCoroutine(sessionId));
-            else { isWaitingForBot = false; UpdateUIState(); }
+            }
+            else
+            {
+                UpdateStatusText("Бот недоступен.");
+                isWaitingForBot = false;
+                UpdateUIState();
+            }
         }
     }
 
     private IEnumerator PollSessionStateCoroutine(int sessionId)
     {
         string url = $"{serverUrl}/api/sessions/{sessionId}";
-        bool responseReceived = false;
+        bool moveFound = false;
 
-        while (!responseReceived)
+        while (!moveFound)
         {
-            yield return new WaitForSeconds(2f);
+            yield return new WaitForSeconds(2f); // Опрос раз в 2 секунды
 
             using (UnityWebRequest request = UnityWebRequest.Get(url))
             {
@@ -201,18 +212,18 @@ public class NetworkChessManager : MonoBehaviour
                 {
                     var response = JsonUtility.FromJson<SessionResponse>(request.downloadHandler.text);
 
-                    // Если количество ходов на сервере увеличилось - значит бот что-то ответил
+                    // Если на сервере ходов больше, чем у нас локально - бот ответил
                     if (response.session.moves != null && response.session.moves.Length > localMovesCount)
                     {
-                        responseReceived = true; // Выходим из цикла
+                        moveFound = true;
                         string botMoveStr = response.session.moves[response.session.moves.Length - 1];
                         ApplyServerMove(botMoveStr);
                     }
                 }
                 else
                 {
-                    UpdateStatusText("Ошибка связи с сервером.");
-                    responseReceived = true; // Прекращаем попытки при ошибке сети
+                    UpdateStatusText("Потеря связи...");
+                    break;
                 }
             }
         }
@@ -221,60 +232,45 @@ public class NetworkChessManager : MonoBehaviour
         UpdateUIState();
     }
 
-
-    #endregion
-
-    #region Helpers
-
-    private void RestartLocalGame()
-    {
-        if (controller != null)
-        {
-            controller.ResetGame();
-            controller.Game.OnMoveExecuted += HandleOnMoveExecuted;
-
-            if (controller.spawner != null)
-            {
-                controller.spawner.Game = controller.Game;
-                controller.spawner.SpawnAll();
-            }
-        }
-    }
-
     private void ApplyServerMove(string moveStr)
     {
         Move move = ConvertStringToMove(moveStr);
         var pieceAtStart = controller.Game.Board.GetPiece(move.From.X, move.From.Y);
 
-        // Если фигура черная и ход валидный — выполняем
+        // Бот должен ходить только черными
         if (!pieceAtStart.IsEmpty && pieceAtStart.Color == PieceColor.Black)
         {
+            // КРИТИЧЕСКИЙ ШАГ: Программный выбор фигуры перед ходом
+            controller.Game.SelectPiece(move.From.X, move.From.Y);
+
+            // Выполняем ход
             bool moveSucceeded = controller.Game.TryMove(move.To.X, move.To.Y);
 
             if (moveSucceeded)
             {
-                // Увеличиваем счетчик ТОЛЬКО при успешном ходе
-                localMovesCount++;
+                localMovesCount++; // Ход выполнен успешно
                 UpdateStatusText($"Бот походил: {moveStr}");
             }
             else
             {
-                // Ход бота невалиден — всё равно увеличиваем счетчик,
-                // чтобы не зациклиться в опросе
-                localMovesCount++;
-                UpdateStatusText("Бот совершил неверный ход.");
+                localMovesCount++; // Ход невозможен по правилам, но мы его "пропускаем"
+                UpdateStatusText("Бот сделал невозможный ход.");
             }
         }
         else
         {
-            // Нет фигуры для хода — пропускаем
-            localMovesCount++;
-            UpdateStatusText("Бот попытался походить пустой клеткой.");
+            localMovesCount++; // Пропускаем некорректный ход из базы
+            UpdateStatusText("Бот ошибся (не черная фигура).");
         }
 
+        // Обновляем визуал
         if (controller.spawner != null) controller.spawner.SpawnAll();
         if (ChessInput.Instance != null) ChessInput.Instance.ClearHighlights();
     }
+
+    #endregion
+
+    #region Helpers & Data Structures
 
     private void UpdateUIState()
     {
@@ -283,10 +279,7 @@ public class NetworkChessManager : MonoBehaviour
 
         if (botMoveButton != null)
         {
-            // Кнопка активна, если:
-            // 1. Сессия создана
-            // 2. Бот сейчас не "думает"
-            // 3. Сейчас ХОД ЧЕРНЫХ (бота)
+            // Кнопка активна только в ход черных
             bool isBlackTurn = controller.Game != null && controller.Game.CurrentTurn == PieceColor.Black;
             botMoveButton.interactable = currentSessionId.HasValue && !isWaitingForBot && isBlackTurn;
         }
@@ -295,6 +288,7 @@ public class NetworkChessManager : MonoBehaviour
     private void UpdateStatusText(string text)
     {
         if (statusText != null) statusText.text = text;
+        Debug.Log($"[NetworkChess] {text}");
     }
 
     private string ConvertMoveToString(Move move)
@@ -304,13 +298,15 @@ public class NetworkChessManager : MonoBehaviour
 
     private Move ConvertStringToMove(string moveStr)
     {
-        string[] p = moveStr.Split('-');
-        return new Move(new BoardPosition(p[0][0] - 'a', p[0][1] - '1'), new BoardPosition(p[1][0] - 'a', p[1][1] - '1'));
+        // Ожидаемый формат "e7-e5"
+        string[] parts = moveStr.Split('-');
+        int fromX = parts[0][0] - 'a';
+        int fromY = parts[0][1] - '1';
+        int toX = parts[1][0] - 'a';
+        int toY = parts[1][1] - '1';
+        return new Move(new BoardPosition(fromX, fromY), new BoardPosition(toX, toY));
     }
 
-    #endregion
-
-    #region JSON
     [Serializable] public class SessionData { public int id; public string status; public string[] moves; }
     [Serializable] public class SessionResponse { public string message; public SessionData session; }
     [Serializable] public class PutMoveRequest { public string move; }
