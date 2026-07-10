@@ -227,7 +227,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b75263647f00c034b911181dd073464e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  serverUrl: https://xpdamir.github.io/webgl-async-ci-cd/
+  serverUrl: https://webgl-async-ci-cd-production.up.railway.app
   menuPanel: {fileID: 1549127865}
   gameUIPanel: {fileID: 1346215159}
   newGameButton: {fileID: 384057548}
