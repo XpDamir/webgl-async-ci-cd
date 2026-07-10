@@ -1,83 +1,66 @@
-/**
- * Простой шахматный бот.
- * Имитирует "размышление" (асинхронная задержка) и возвращает случайный ход.
- * В реальном проекте здесь был бы алгоритм с минимаксом или подключение к Stockfish.
- */
-
-// Простые примеры ходов для имитации
-const SAMPLE_MOVES = [
-    { move: 'e7-e5', fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2' },
-    { move: 'd7-d5', fen: 'rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2' },
-    { move: 'g8-f6', fen: 'rnbqkb1r/pppppppp/5n2/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2' },
-    { move: 'b8-c6', fen: 'r1bqkbnr/pppppppp/2n5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2' },
-    { move: 'f8-c5', fen: 'rnbqk1nr/pppp1ppp/8/2b1p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2' },
-    { move: 'd8-h4', fen: 'rnb1kbnr/pppp1ppp/8/4p3/4P2q/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2' },
-    { move: 'a7-a6', fen: 'rnbqkbnr/1ppppppp/p7/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2' },
-    { move: 'h7-h6', fen: 'rnbqkbnr/ppppppp1/7p/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2' },
-];
+import { Chess } from 'chess.js';
 
 /**
- * Асинхронно рассчитывает ход бота.
- * Имитирует задержку "размышления" от 1 до 3 секунд.
+ * Асинхронно рассчитывает ход бота с использованием библиотеки chess.js
  * 
  * @param {string} fen - Текущая позиция в FEN-формате
- * @param {string[]} previousMoves - Массив уже сделанных ходов
+ * @param {string[]} previousMoves - Массив уже сделанных ходов (для истории)
  * @returns {Promise<{move: string, fen: string}>} - Ход бота и новая позиция
  */
 export async function calculateBotMove(fen, previousMoves = []) {
-    // Имитация времени "размышления" бота (1-3 секунды)
-    const thinkingTime = 1000 + Math.floor(Math.random() * 2000);
+    // Имитация времени "размышления" бота (1-2 секунды)
+    const thinkingTime = 1000 + Math.floor(Math.random() * 1000);
+    console.log(`Бот анализирует позицию... (${thinkingTime / 1000} сек)`);
 
-    console.log(`Бот думает над ходом... (${thinkingTime / 1000} сек)`);
-
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         setTimeout(() => {
-            // Фильтруем ходы, которые ещё не были сделаны (упрощённо)
-            const availableMoves = SAMPLE_MOVES.filter(
-                (m) => !previousMoves.includes(m.move)
-            );
+            try {
+                // Загружаем текущую позицию в движок
+                // Если FEN пустой или некорректный, chess.js начнет с начальной позиции
+                const chess = new Chess(fen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
 
-            // Если все ходы из примера исчерпаны, возвращаем случайный
-            if (availableMoves.length === 0) {
-                const randomMove = SAMPLE_MOVES[
-                    Math.floor(Math.random() * SAMPLE_MOVES.length)
-                ];
-                console.log(`Бот походил: ${randomMove.move}`);
-                resolve(randomMove);
-                return;
+                // Получаем список ВСЕХ легальных ходов для текущей стороны (черных)
+                const legalMoves = chess.moves({ verbose: true });
+
+                if (legalMoves.length === 0) {
+                    console.log("Ходов больше нет (мат или пат)");
+                    resolve({ move: null, fen: chess.fen() });
+                    return;
+                }
+
+                // Выбираем случайный ход из списка ГАРАНТИРОВАННО легальных
+                const randomMove = legalMoves[Math.floor(Math.random() * legalMoves.length)];
+
+                // Делаем ход в виртуальной доске, чтобы получить новый FEN
+                chess.move(randomMove);
+
+                // Форматируем ход в наш стандарт "e7-e5"
+                const formattedMove = `${randomMove.from}-${randomMove.to}`;
+
+                console.log(`Бот выбрал легальный ход: ${formattedMove}`);
+
+                resolve({
+                    move: formattedMove,
+                    fen: chess.fen()
+                });
+            } catch (error) {
+                console.error("Ошибка при расчете хода бота:", error);
+                reject(error);
             }
-
-            // Выбираем случайный ход из доступных
-            const chosenMove = availableMoves[
-                Math.floor(Math.random() * availableMoves.length)
-            ];
-
-            console.log(`Бот походил: ${chosenMove.move}`);
-            resolve(chosenMove);
         }, thinkingTime);
     });
 }
 
 /**
- * Проверяет, завершена ли партия.
- * В реальном проекте здесь была бы проверка мата, пата и т.д.
- * 
- * @param {string} fen - Текущая позиция
- * @param {string[]} moves - Все ходы в партии
- * @returns {{isOver: boolean, result: string|null}}
+ * Проверяет состояние игры (завершена ли она)
  */
 export function checkGameOver(fen, moves = []) {
-    // Упрощённая проверка: завершаем партию после 20 ходов
-    if (moves.length >= 20) {
-        return {
-            isOver: true,
-            result: Math.random() > 0.5 ? 'white_win' : 'draw',
-        };
-    }
-
+    const chess = new Chess(fen);
+    
     return {
-        isOver: false,
-        result: null,
+        isOver: chess.isGameOver(),
+        result: chess.isCheckmate() ? "checkmate" : 
+                chess.isDraw() ? "draw" : null
     };
 }
 
