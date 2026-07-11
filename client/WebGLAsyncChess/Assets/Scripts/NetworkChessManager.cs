@@ -1,25 +1,30 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.UI;
 using ChessCore;
-using System.Reflection;
 
 public class NetworkChessManager : MonoBehaviour
 {
     [Header("API Settings")]
     [SerializeField] private string serverUrl = "https://webgl-async-ci-cd-production.up.railway.app";
 
-    [Header("UI Roots")]
+    [Header("UI Panels")]
     [SerializeField] private GameObject menuPanel;
     [SerializeField] private GameObject gameUIPanel;
+    [SerializeField] private GameObject resultPanel;
 
     [Header("UI References")]
     [SerializeField] private Button newGameButton;
     [SerializeField] private Button botMoveButton;
+    [SerializeField] private Button menuButton;
     [SerializeField] private Text statusText;
+    [SerializeField] private Text resultText;
+
+    [Header("Coordinates")]
+    [SerializeField] private BoardCoordinates boardCoordinates;
+
 
     private ChessGameController2D controller;
     private int? currentSessionId = null;
@@ -33,11 +38,11 @@ public class NetworkChessManager : MonoBehaviour
 
     private void Start()
     {
-        if (menuPanel != null) menuPanel.SetActive(true);
-        if (gameUIPanel != null) gameUIPanel.SetActive(false);
+        ShowMenuPanel();
 
         if (newGameButton != null) newGameButton.onClick.AddListener(CreateNewGame);
         if (botMoveButton != null) botMoveButton.onClick.AddListener(RequestBotMove);
+        if (menuButton != null) menuButton.onClick.AddListener(ReturnToMenu);
 
         UpdateUIState();
     }
@@ -49,6 +54,64 @@ public class NetworkChessManager : MonoBehaviour
             controller.Game.OnMoveExecuted -= HandleOnMoveExecuted;
         }
     }
+
+    #region Panel Management
+
+    private void ShowMenuPanel()
+    {
+        if (menuPanel != null) menuPanel.SetActive(true);
+        if (gameUIPanel != null) gameUIPanel.SetActive(false);
+        if (resultPanel != null) resultPanel.SetActive(false);
+        if (boardCoordinates != null) boardCoordinates.Hide();
+    }
+
+    private void ShowGamePanel()
+    {
+        if (menuPanel != null) menuPanel.SetActive(false);
+        if (gameUIPanel != null) gameUIPanel.SetActive(true);
+        if (resultPanel != null) resultPanel.SetActive(false);
+    }
+
+    private void ShowResultPanel(string result)
+    {
+        if (gameUIPanel != null) gameUIPanel.SetActive(false);
+        if (resultPanel != null) resultPanel.SetActive(true);
+
+        if (resultText != null)
+        {
+            switch (result)
+            {
+                case "white_win":
+                case "checkmate":
+                    resultText.text = "Победа!";
+                    resultText.color = Color.green;
+                    break;
+                case "black_win":
+                    resultText.text = "Поражение!";
+                    resultText.color = Color.red;
+                    break;
+                case "draw":
+                    resultText.text = "Ничья!";
+                    resultText.color = Color.yellow;
+                    break;
+                default:
+                    resultText.text = "Игра завершена";
+                    resultText.color = Color.white;
+                    break;
+            }
+        }
+    }
+
+    public void ReturnToMenu()
+    {
+        currentSessionId = null;
+        localMovesCount = 0;
+        isWaitingForBot = false;
+        if (boardCoordinates != null) boardCoordinates.Hide();
+        ShowMenuPanel();
+    }
+
+    #endregion
 
     #region Game Initialization
 
@@ -78,9 +141,12 @@ public class NetworkChessManager : MonoBehaviour
 
                 RestartLocalGame();
                 controller.InitializeBoard();
-
-                if (menuPanel != null) menuPanel.SetActive(false);
-                if (gameUIPanel != null) gameUIPanel.SetActive(true);
+                if (boardCoordinates != null)
+                {
+                    boardCoordinates.Generate();
+                    boardCoordinates.Show();
+                }
+                ShowGamePanel();
 
                 UpdateStatusText($"Игра началась! ID: {currentSessionId}");
             }
@@ -137,7 +203,6 @@ public class NetworkChessManager : MonoBehaviour
             if (request.result == UnityWebRequest.Result.Success)
             {
                 localMovesCount++;
-                Debug.Log($"[NetworkChess] Ход {moveStr} подтвержден сервером. localMovesCount: {localMovesCount}");
                 UpdateUIState();
             }
             else
@@ -209,6 +274,13 @@ public class NetworkChessManager : MonoBehaviour
                         moveFound = true;
                         string botMoveStr = response.session.moves[response.session.moves.Length - 1];
                         ApplyServerMove(botMoveStr);
+
+                        if (response.session.status == "completed")
+                        {
+                            ShowResultPanel(response.session.result);
+                            isWaitingForBot = false;
+                            yield break;
+                        }
                     }
                 }
                 else
@@ -238,7 +310,6 @@ public class NetworkChessManager : MonoBehaviour
         if (!pieceAtStart.IsEmpty && pieceAtStart.Color == PieceColor.Black)
         {
             controller.Game.SelectPiece(move.From.X, move.From.Y);
-
             bool moveSucceeded = controller.Game.TryMove(move.To.X, move.To.Y);
 
             if (moveSucceeded)
@@ -264,7 +335,7 @@ public class NetworkChessManager : MonoBehaviour
 
     #endregion
 
-    #region Helpers & Data Structures
+    #region Helpers
 
     private void UpdateUIState()
     {
@@ -306,8 +377,13 @@ public class NetworkChessManager : MonoBehaviour
         return new Move(new BoardPosition(fromX, fromY), new BoardPosition(toX, toY));
     }
 
-    [Serializable] public class SessionData { public int id; public string status; public string[] moves; }
+    #endregion
+
+    #region JSON
+
+    [Serializable] public class SessionData { public int id; public string status; public string result; public string[] moves; }
     [Serializable] public class SessionResponse { public string message; public SessionData session; }
     [Serializable] public class PutMoveRequest { public string move; }
+
     #endregion
 }

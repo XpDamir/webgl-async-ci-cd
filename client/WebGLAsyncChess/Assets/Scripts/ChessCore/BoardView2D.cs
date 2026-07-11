@@ -48,6 +48,7 @@ public class BoardView2D : MonoBehaviour
                 tiles[x, y] = tile;
             }
         }
+
     }
 
     public void HighlightTile(int x, int y, bool highlight)

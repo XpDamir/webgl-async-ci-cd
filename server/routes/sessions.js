@@ -125,6 +125,37 @@ router.get('/:id', async (req, res) => {
 });
 
 /**
+ * GET /api/sessions/:id/result
+ * Получить результат партии.
+ */
+router.get('/:id/result', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const result = await pool.query(
+            'SELECT status, result, moves FROM sessions WHERE id = $1',
+            [id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Сессия не найдена' });
+        }
+
+        const session = result.rows[0];
+
+        res.json({
+            sessionId: parseInt(id),
+            status: session.status,
+            result: session.result,
+            totalMoves: session.moves ? session.moves.length : 0,
+        });
+    } catch (error) {
+        console.error('Ошибка получения результата:', error);
+        res.status(500).json({ error: 'Не удалось получить результат' });
+    }
+});
+
+/**
  * PUT /api/sessions/:id
  * Обновить сессию (добавить ход, изменить статус, FEN).
  * Основной эндпоинт для записи ходов во время игры.
