@@ -17,31 +17,25 @@ export async function calculateBotMove(fen, previousMoves = []) {
             try {
                 const chess = new Chess(fen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
 
-                // Проверяем, чей сейчас ход
-                const currentTurn = chess.turn(); // 'w' или 'b'
-                
-                // Бот всегда играет за чёрных. Если сейчас ход белых — бот не должен ходить
-                if (currentTurn === 'w') {
-                    console.log('Сейчас ход белых, бот пропускает ход');
-                    resolve({ move: null, fen: chess.fen() });
+                // Бот всегда играет за чёрных.
+                // Если сейчас ход белых — это ошибка вызова, не отвечаем null.
+                if (chess.turn() === 'w') {
+                    console.log('Ошибка: бот вызван во время хода белых');
+                    resolve({ move: null, fen: chess.fen(), skipped: true });
                     return;
                 }
 
-                // Получаем легальные ходы только для чёрных
                 const legalMoves = chess.moves({ verbose: true });
 
                 if (legalMoves.length === 0) {
-                    console.log('У чёрных нет ходов (мат или пат)');
+                    console.log('У чёрных нет ходов');
                     resolve({ move: null, fen: chess.fen(), gameOver: true });
                     return;
                 }
 
-                // Выбираем случайный ход
                 const randomMove = legalMoves[Math.floor(Math.random() * legalMoves.length)];
-                
-                // Делаем ход
                 chess.move(randomMove);
-                
+
                 const formattedMove = `${randomMove.from}-${randomMove.to}`;
                 console.log(`Бот походил (чёрные): ${formattedMove}`);
 

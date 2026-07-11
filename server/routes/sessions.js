@@ -259,6 +259,10 @@ router.post('/:id/bot-move', async (req, res) => {
                 );
 
                 // Обновляем сессию с ходом бота
+                if (!botResult.move) {
+                    console.log(`Бот не смог сделать ход для сессии ${id}`);
+                    return;
+                }
                 const updatedMoves = [...(session.moves || []), botResult.move];
                 const gameState = bot.checkGameOver(
                     botResult.fen,

@@ -234,6 +234,13 @@ public class NetworkChessManager : MonoBehaviour
 
     private void ApplyServerMove(string moveStr)
     {
+        if (string.IsNullOrEmpty(moveStr) || moveStr == "null")
+        {
+            UpdateStatusText("Бот пропустил ход.");
+            localMovesCount++;
+            return;
+        }
+
         Move move = ConvertStringToMove(moveStr);
         var pieceAtStart = controller.Game.Board.GetPiece(move.From.X, move.From.Y);
 
@@ -298,12 +305,18 @@ public class NetworkChessManager : MonoBehaviour
 
     private Move ConvertStringToMove(string moveStr)
     {
-        // Ожидаемый формат "e7-e5"
-        string[] parts = moveStr.Split('-');
-        int fromX = parts[0][0] - 'a';
-        int fromY = parts[0][1] - '1';
-        int toX = parts[1][0] - 'a';
-        int toY = parts[1][1] - '1';
+        string[] p = moveStr.Split('-');
+        if (p.Length != 2 || p[0].Length < 2 || p[1].Length < 2)
+        {
+            Debug.LogError($"Неверный формат хода: {moveStr}");
+            return new Move(new BoardPosition(0, 0), new BoardPosition(0, 0));
+        }
+
+        int fromX = p[0][0] - 'a';
+        int fromY = p[0][1] - '1';
+        int toX = p[1][0] - 'a';
+        int toY = p[1][1] - '1';
+
         return new Move(new BoardPosition(fromX, fromY), new BoardPosition(toX, toY));
     }
 
