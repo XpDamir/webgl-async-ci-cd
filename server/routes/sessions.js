@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import pool from '../db.js';
+import { Chess } from 'chess.js';
 
 const router = Router();
 
@@ -133,31 +134,38 @@ router.put('/:id', async (req, res) => {
         const { id } = req.params;
         const { move, fen, status, result } = req.body;
 
-        // Получаем текущую сессию
         const current = await pool.query('SELECT * FROM sessions WHERE id = $1', [id]);
 
         if (current.rows.length === 0) {
-            return res.status(404).json({
-                error: 'Сессия не найдена',
-            });
+            return res.status(404).json({ error: 'Сессия не найдена' });
         }
 
         const session = current.rows[0];
 
-        // Обновляем массив ходов, если передан новый ход
         let moves = session.moves || [];
         if (move) {
             moves = [...moves, move];
         }
 
-        // Обновляем FEN, если передан
-        const newFen = fen || session.fen;
+        // Вычисляем FEN через chess.js
+        let computedFen = session.fen;
+        if (move) {
+            try {
+                const chess = new Chess(session.fen);
+                const parts = move.split('-');
+                if (parts.length === 2) {
+                    chess.move({ from: parts[0], to: parts[1] });
+                    computedFen = chess.fen();
+                }
+            } catch (e) {
+                console.error('Ошибка вычисления FEN:', e.message);
+            }
+        }
 
-        // Обновляем статус и результат
+        const newFen = fen || computedFen;
         const newStatus = status || session.status;
         const newResult = result || session.result;
 
-        // Если статус меняется на completed, фиксируем время
         let completedAt = session.completed_at;
         if (newStatus === 'completed' && session.status !== 'completed') {
             completedAt = new Date().toISOString();
@@ -171,16 +179,10 @@ router.put('/:id', async (req, res) => {
             [moves, newFen, newStatus, newResult, completedAt, id]
         );
 
-        res.json({
-            message: 'Сессия обновлена',
-            session: updateResult.rows[0],
-        });
+        res.json({ message: 'Сессия обновлена', session: updateResult.rows[0] });
     } catch (error) {
         console.error('Ошибка обновления сессии:', error);
-        res.status(500).json({
-            error: 'Не удалось обновить сессию',
-            details: error.message,
-        });
+        res.status(500).json({ error: 'Не удалось обновить сессию', details: error.message });
     }
 });
 
