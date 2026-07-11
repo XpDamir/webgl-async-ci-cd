@@ -242,7 +242,6 @@ router.post('/:id/bot-move', async (req, res) => {
 
         const session = current.rows[0];
 
-        // Проверяем, что сессия активна
         if (session.status !== 'active') {
             return res.status(400).json({
                 error: 'Сессия уже завершена',
@@ -250,7 +249,6 @@ router.post('/:id/bot-move', async (req, res) => {
             });
         }
 
-        // Запускаем асинхронный расчёт хода бота (НЕ ждём результата)
         import('../services/bot.js').then(async (bot) => {
             try {
                 console.log(`Запущен асинхронный расчёт хода бота для сессии ${id}`);
@@ -260,7 +258,6 @@ router.post('/:id/bot-move', async (req, res) => {
                     session.moves || []
                 );
 
-                // Обновляем сессию с ходом бота
                 if (!botResult.move) {
                     console.log(`Бот не смог сделать ход для сессии ${id}`);
                     return;
@@ -297,7 +294,6 @@ router.post('/:id/bot-move', async (req, res) => {
             }
         });
 
-        // Сразу отвечаем клиенту, не дожидаясь бота
         res.json({
             message: 'Бот думает над ходом',
             status: 'processing',

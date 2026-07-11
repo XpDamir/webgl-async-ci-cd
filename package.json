@@ -1,5 +1,30 @@
 {
   "dependencies": {
     "chess.js": "^1.4.0"
+  },
+  "name": "webgl-async-ci-cd",
+  "version": "1.0.0",
+  "description": "Проект",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint:client": "eslint docs/api.js --config .eslintrc.client.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://XpDamir@github.com/XpDamir/webgl-async-ci-cd.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/XpDamir/webgl-async-ci-cd/issues"
+  },
+  "homepage": "https://github.com/XpDamir/webgl-async-ci-cd#readme",
+  "devDependencies": {
+    "eslint": "^8.57.1"
   }
 }

@@ -8,7 +8,6 @@ const pool = new Pool({
     database: process.env.DB_NAME || 'chess_sessions',
     user: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASSWORD || 'postgres',
-    // Таймаут подключения
     connectionTimeoutMillis: 5000,
 });
 
@@ -33,7 +32,7 @@ export async function initDatabase(retries = 10, delay = 2000) {
                     );
                 `);
                 console.log('Таблица sessions готова');
-                return; // Успех — выходим
+                return;
             } finally {
                 client.release();
             }
@@ -46,7 +45,6 @@ export async function initDatabase(retries = 10, delay = 2000) {
                     `Не удалось подключиться к БД после ${retries} попыток`
                 );
             }
-            // Ждём перед следующей попыткой
             await new Promise((resolve) => setTimeout(resolve, delay));
         }
     }

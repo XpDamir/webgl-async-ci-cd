@@ -23,17 +23,15 @@ public class PieceView : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDra
         }
     }
 
+
     public void OnBeginDrag(PointerEventData eventData)
     {
-        // 1. —разу запоминаем позицию, чтобы было куда вернуть фигуру
         startPos = transform.position;
 
-        // 2. ѕровер€ем, можно ли ходить
         var game = ChessInput.Instance.controller.Game;
         var piece = game.Board.GetPiece(X, Y);
 
-        // »грок может т€нуть только свои (белые) фигуры и только в свой ход
-        if (game.CurrentTurn == PieceColor.White && piece.Color == PieceColor.White)
+        if (!piece.IsEmpty && game.CurrentTurn == PieceColor.White && piece.Color == PieceColor.White)
         {
             isDraggingAllowed = true;
 
@@ -75,13 +73,11 @@ public class PieceView : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDra
 
         if (controller.Game.TryMove(targetX, targetY))
         {
-            // ”спешный ход
             controller.spawner.SpawnAll();
             ChessInput.Instance.ClearHighlights();
         }
         else
         {
-            // Ќеверный ход - возвращаем на место
             transform.position = startPos;
             ChessInput.Instance.ClearHighlights();
         }

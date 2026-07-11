@@ -7,7 +7,6 @@ import pkg from 'pg';
 
 const { Pool } = pkg;
 
-// Создаём тестовое подключение к БД
 const pool = new Pool({
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '5432'),
@@ -16,7 +15,6 @@ const pool = new Pool({
     password: process.env.DB_PASSWORD || 'postgres',
 });
 
-// Импортируем роутер
 import sessionsRouter from '../routes/sessions.js';
 
 let server;
@@ -36,9 +34,7 @@ async function request(path, options = {}) {
 describe('Sessions API', () => {
     let testSessionId = null;
 
-    // Перед всеми тестами: создать таблицу и запустить сервер
     before(async () => {
-        // Создаём таблицу, если её нет
         await pool.query(`
             CREATE TABLE IF NOT EXISTS sessions (
                 id SERIAL PRIMARY KEY,
@@ -52,7 +48,6 @@ describe('Sessions API', () => {
             );
         `);
 
-        // Запускаем сервер
         const app = express();
         app.use(cors());
         app.use(express.json());
@@ -66,7 +61,6 @@ describe('Sessions API', () => {
         });
     });
 
-    // После всех тестов: остановить сервер
     after(async () => {
         if (server) {
             await new Promise((resolve) => server.close(resolve));

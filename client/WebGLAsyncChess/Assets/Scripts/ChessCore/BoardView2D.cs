@@ -13,7 +13,6 @@ public class BoardView2D : MonoBehaviour
 
     public void Generate()
     {
-        // Создаем или очищаем контейнер клеток
         if (tilesContainer == null)
         {
             GameObject go = new GameObject("TilesContainer");
@@ -22,10 +21,12 @@ public class BoardView2D : MonoBehaviour
             tilesContainer.localPosition = Vector3.zero;
         }
 
-        // Очистка старых клеток (через Immediate)
         for (int i = tilesContainer.childCount - 1; i >= 0; i--)
         {
-            DestroyImmediate(tilesContainer.GetChild(i).gameObject);
+            if (Application.isPlaying)
+                Destroy(tilesContainer.GetChild(i).gameObject);
+            else
+                DestroyImmediate(tilesContainer.GetChild(i).gameObject);
         }
 
         for (int x = 0; x < 8; x++)

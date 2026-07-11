@@ -17,8 +17,6 @@ export async function calculateBotMove(fen, previousMoves = []) {
             try {
                 const chess = new Chess(fen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
 
-                // Бот всегда играет за чёрных.
-                // Если сейчас ход белых — это ошибка вызова, не отвечаем null.
                 if (chess.turn() === 'w') {
                     console.log('Ошибка: бот вызван во время хода белых');
                     resolve({ move: null, fen: chess.fen(), skipped: true });

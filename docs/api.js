@@ -1,8 +1,4 @@
-// Базовый URL сервера
-// При разработке локально:
 const API_URL = 'https://webgl-async-ci-cd-production.up.railway.app';
-// При деплое заменить на публичный URL Railway:
-// const API_URL = 'https://ваш-сервер.up.railway.app';
 
 /**
  * Создать новую игровую сессию на сервере.

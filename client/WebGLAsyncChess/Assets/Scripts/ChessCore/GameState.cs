@@ -14,7 +14,6 @@ namespace ChessCore
         private BoardPosition? selectedPiece;
         private List<Move> currentLegalMoves = new List<Move>();
 
-        // Событие, которое будет срабатывать при совершении хода на клиенте
         public event Action<Move> OnMoveExecuted;
 
         public GameState()
@@ -23,6 +22,7 @@ namespace ChessCore
             Board.Initialize();
             CurrentTurn = PieceColor.White;
         }
+
 
         public List<BoardPosition> SelectPiece(int x, int y)
         {
@@ -48,7 +48,6 @@ namespace ChessCore
 
             ExecuteLocalMove(move);
 
-            // Оповещаем сетевой менеджер о совершенном ходе
             OnMoveExecuted?.Invoke(move);
 
             return true;
