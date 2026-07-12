@@ -199,11 +199,13 @@ public class NetworkChessManager : MonoBehaviour
 
     private void HandleOnMoveExecuted(Move move)
     {
-
-        Debug.Log($"[NetworkChess] OnMoveExecuted: {move.From.X},{move.From.Y} -> {move.To.X},{move.To.Y}, localMovesCount before: {localMovesCount}");
-        // Отправляем только ходы белых (игрока)
+        // Получаем фигуру, которая походила
         var piece = controller.Game.Board.GetPiece(move.To.X, move.To.Y);
+
+        // Отправляем только ходы белых (игрока)
         if (piece.Color != PieceColor.White) return;
+
+        Debug.Log($"[NetworkChess] Ход белых: {ConvertMoveToString(move)}, localMovesCount before: {localMovesCount}");
 
         if (currentSessionId.HasValue)
         {
