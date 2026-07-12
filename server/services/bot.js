@@ -15,16 +15,27 @@ export async function calculateBotMove(fen, previousMoves = []) {
                     return;
                 }
 
-                const legalMoves = chess.moves({ verbose: true });
-
-                if (legalMoves.length === 0) {
-                    console.log('Бот: нет легальных ходов');
-                    const isCheckmate = chess.isCheckmate();
+                // Проверяем завершение до хода
+                if (chess.isGameOver()) {
+                    console.log('Бот: игра уже завершена');
                     resolve({
                         move: null,
                         fen: chess.fen(),
                         gameOver: true,
-                        result: isCheckmate ? 'white_win' : 'draw',
+                        result: getResult(chess),
+                    });
+                    return;
+                }
+
+                const legalMoves = chess.moves({ verbose: true });
+
+                if (legalMoves.length === 0) {
+                    console.log('Бот: нет легальных ходов');
+                    resolve({
+                        move: null,
+                        fen: chess.fen(),
+                        gameOver: true,
+                        result: getResult(chess),
                     });
                     return;
                 }
@@ -37,9 +48,22 @@ export async function calculateBotMove(fen, previousMoves = []) {
                 }
 
                 chess.move(randomMove);
-                console.log(`Бот походил: ${formattedMove}`);
 
-                resolve({ move: formattedMove, fen: chess.fen() });
+                const isOver = chess.isGameOver();
+                const result = isOver ? getResult(chess) : null;
+
+                if (isOver) {
+                    console.log(`Бот: игра завершена (${result})`);
+                } else {
+                    console.log(`Бот походил: ${formattedMove}`);
+                }
+
+                resolve({
+                    move: formattedMove,
+                    fen: chess.fen(),
+                    gameOver: isOver,
+                    result: result,
+                });
             } catch (error) {
                 console.error('Ошибка бота:', error.message);
                 resolve({ move: null, fen: fen, error: error.message });
@@ -48,12 +72,24 @@ export async function calculateBotMove(fen, previousMoves = []) {
     });
 }
 
+function getResult(chess) {
+    if (chess.isCheckmate()) {
+        // Чей ход сейчас — тот проиграл
+        return chess.turn() === 'b' ? 'white_win' : 'black_win';
+    }
+    if (chess.isStalemate()) return 'draw';
+    if (chess.isThreefoldRepetition()) return 'draw';
+    if (chess.isInsufficientMaterial()) return 'draw';
+    if (chess.isDraw()) return 'draw';
+    return 'draw';
+}
+
 export function checkGameOver(fen) {
     try {
         const chess = new Chess(fen);
         return {
             isOver: chess.isGameOver(),
-            result: chess.isCheckmate() ? 'white_win' : chess.isDraw() ? 'draw' : null,
+            result: chess.isGameOver() ? getResult(chess) : null,
         };
     } catch {
         return { isOver: false, result: null };

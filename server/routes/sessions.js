@@ -1,7 +1,17 @@
 import { Router } from 'express';
 import pool from '../db.js';
+import { Chess } from 'chess.js';
 
 const router = Router();
+
+function getResult(chess) {
+    if (chess.isCheckmate()) return chess.turn() === 'b' ? 'white_win' : 'black_win';
+    if (chess.isStalemate()) return 'draw';
+    if (chess.isThreefoldRepetition()) return 'draw';
+    if (chess.isInsufficientMaterial()) return 'draw';
+    if (chess.isDraw()) return 'draw';
+    return null;
+}
 
 // POST /api/sessions
 router.post('/', async (req, res) => {
@@ -104,11 +114,14 @@ router.put('/:id', async (req, res) => {
         let moves = session.moves || [];
         if (move) moves = [...moves, move];
 
-        // Сервер сам вычисляет FEN
         let computedFen = session.fen;
-        if (move) {
+        let newStatus = status || session.status;
+        let newResult = result || session.result;
+        let completedAt = session.completed_at;
+        let newDuration = session.duration;
+
+        if (move && session.status === 'active') {
             try {
-                const { Chess } = await import('chess.js');
                 const chess = new Chess(session.fen);
                 const parts = move.split('-');
                 if (parts.length === 2) {
@@ -126,6 +139,14 @@ router.put('/:id', async (req, res) => {
                     }
                     chess.move(moveObj);
                     computedFen = chess.fen();
+
+                    // Проверяем завершение игры после хода игрока
+                    if (chess.isGameOver()) {
+                        newStatus = 'completed';
+                        newResult = getResult(chess);
+                        completedAt = new Date().toISOString();
+                        newDuration = Math.floor((new Date(completedAt) - new Date(session.created_at)) / 1000);
+                    }
                 }
             } catch (e) {
                 console.error('Ошибка хода игрока:', e.message);
@@ -133,37 +154,33 @@ router.put('/:id', async (req, res) => {
             }
         }
 
-        const newStatus = status || session.status;
-        const newResult = result || session.result;
-
-        let completedAt = session.completed_at;
-        let newDuration = session.duration;
-        if (newStatus === 'completed' && session.status !== 'completed') {
-            completedAt = new Date().toISOString();
-            newDuration = Math.floor((new Date(completedAt) - new Date(session.created_at)) / 1000);
-        }
-
         const updateResult = await pool.query(
             `UPDATE sessions SET moves = $1, fen = $2, status = $3, result = $4, completed_at = $5, duration = $6 WHERE id = $7 RETURNING *`,
             [moves, computedFen, newStatus, newResult, completedAt, newDuration, id]
         );
 
-        // Автоматически запускаем бота, если ход белых и игра не завершена
+        // Если ход белых и игра не завершена — запускаем бота
         if (computedFen.includes(' b ') && newStatus !== 'completed') {
-            // Запускаем бота асинхронно
             import('../services/bot.js').then(async (bot) => {
                 try {
                     const botResult = await bot.calculateBotMove(computedFen, moves);
                     if (botResult && botResult.move) {
                         const botMoves = [...moves, botResult.move];
-                        const gameState = bot.checkGameOver(botResult.fen);
                         let botDuration = null;
-                        if (gameState.isOver) {
-                            botDuration = Math.floor((Date.now() - new Date(session.created_at)) / 1000);
+                        let botStatus = 'active';
+                        let botResult2 = null;
+                        let botCompletedAt = null;
+
+                        if (botResult.gameOver) {
+                            botStatus = 'completed';
+                            botResult2 = botResult.result;
+                            botCompletedAt = new Date().toISOString();
+                            botDuration = Math.floor((new Date(botCompletedAt) - new Date(session.created_at)) / 1000);
                         }
+
                         await pool.query(
                             `UPDATE sessions SET fen = $1, moves = $2, status = $3, result = $4, completed_at = $5, duration = $6 WHERE id = $7`,
-                            [botResult.fen, botMoves, gameState.isOver ? 'completed' : 'active', gameState.result, gameState.isOver ? new Date().toISOString() : null, botDuration, id]
+                            [botResult.fen, botMoves, botStatus, botResult2, botCompletedAt, botDuration, id]
                         );
                     }
                 } catch (err) {
@@ -189,57 +206,6 @@ router.delete('/:id', async (req, res) => {
     } catch (error) {
         console.error('Ошибка удаления сессии:', error);
         res.status(500).json({ error: 'Не удалось удалить сессию', details: error.message });
-    }
-});
-
-// POST /api/sessions/:id/bot-move
-router.post('/:id/bot-move', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const current = await pool.query('SELECT * FROM sessions WHERE id = $1', [id]);
-
-        if (current.rows.length === 0) return res.status(404).json({ error: 'Сессия не найдена' });
-
-        const session = current.rows[0];
-
-        if (session.status !== 'active') {
-            return res.status(400).json({ error: 'Сессия уже завершена', status: session.status });
-        }
-
-        import('../services/bot.js').then(async (bot) => {
-            try {
-                console.log(`Бот: расчёт хода для сессии ${id}`);
-                const botResult = await bot.calculateBotMove(session.fen, session.moves || []);
-
-                if (!botResult || !botResult.move) {
-                    console.log(`Бот: нет хода для сессии ${id}`);
-                    return;
-                }
-
-                const updatedMoves = [...(session.moves || []), botResult.move];
-                const gameState = bot.checkGameOver(botResult.fen);
-
-                let botDuration = null;
-                if (gameState.isOver) {
-                    const startTime = new Date(session.created_at).getTime();
-                    botDuration = Math.floor((Date.now() - startTime) / 1000);
-                }
-
-                await pool.query(
-                    `UPDATE sessions SET fen = $1, moves = $2, status = $3, result = $4, completed_at = $5, duration = $6 WHERE id = $7`,
-                    [botResult.fen, updatedMoves, gameState.isOver ? 'completed' : 'active', gameState.result, gameState.isOver ? new Date().toISOString() : null, botDuration, id]
-                );
-
-                console.log(`Бот: ход ${botResult.move} сохранён для сессии ${id}`);
-            } catch (error) {
-                console.error(`Бот: ошибка для сессии ${id}:`, error.message);
-            }
-        });
-
-        res.json({ message: 'Бот думает над ходом', status: 'processing', sessionId: parseInt(id) });
-    } catch (error) {
-        console.error('Ошибка при запросе хода бота:', error);
-        res.status(500).json({ error: 'Не удалось запустить расчёт хода бота', details: error.message });
     }
 });
 

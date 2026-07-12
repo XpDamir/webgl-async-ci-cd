@@ -37,7 +37,13 @@ public class NetworkChessManager : MonoBehaviour
 
     public static bool IsWaitingForBotStatic { get; private set; } = false;
 
-    private void Awake() { controller = GetComponent<ChessGameController2D>(); }
+    private void Awake()
+    {
+        controller = GetComponent<ChessGameController2D>();
+#if UNITY_EDITOR
+        serverUrl = "http://localhost:5000";
+#endif
+    }
 
     private void Start()
     {
@@ -78,16 +84,31 @@ public class NetworkChessManager : MonoBehaviour
     private void ShowResultPanel(string result)
     {
         UpdateWaitingState(false);
+        if (gameTimer != null) gameTimer.StopTimer();
         if (gameUIPanel != null) gameUIPanel.SetActive(false);
         if (resultPanel != null) resultPanel.SetActive(true);
+
         if (resultText != null)
         {
             switch (result)
             {
-                case "white_win": case "checkmate": resultText.text = "Победа!"; resultText.color = Color.green; break;
-                case "black_win": resultText.text = "Поражение!"; resultText.color = Color.red; break;
-                case "draw": resultText.text = "Ничья!"; resultText.color = Color.yellow; break;
-                default: resultText.text = "Игра завершена"; resultText.color = Color.white; break;
+                case "white_win":
+                case "checkmate":
+                    resultText.text = "Победа! Мат чёрным.";
+                    resultText.color = Color.green;
+                    break;
+                case "black_win":
+                    resultText.text = "Поражение! Мат белым.";
+                    resultText.color = Color.red;
+                    break;
+                case "draw":
+                    resultText.text = "Ничья!";
+                    resultText.color = Color.yellow;
+                    break;
+                default:
+                    resultText.text = "Игра завершена";
+                    resultText.color = Color.white;
+                    break;
             }
         }
     }
@@ -167,7 +188,6 @@ public class NetworkChessManager : MonoBehaviour
 
     private IEnumerator SendMoveCoroutine(int sessionId, string moveStr)
     {
-        // Блокируем доску немедленно
         UpdateWaitingState(true);
         UpdateUIState();
 
@@ -184,8 +204,16 @@ public class NetworkChessManager : MonoBehaviour
 
             if (request.result == UnityWebRequest.Result.Success)
             {
+                var putResponse = JsonUtility.FromJson<SessionResponse>(request.downloadHandler.text);
                 localMovesCount++;
-                UpdateUIState();
+
+                if (putResponse.session.status == "completed")
+                {
+                    if (gameTimer != null) gameTimer.StopTimer();
+                    ShowResultPanel(putResponse.session.result ?? "draw");
+                    yield break;
+                }
+
                 UpdateStatusText("Бот думает...");
                 StartCoroutine(WaitForBotMove(sessionId));
             }
@@ -200,15 +228,18 @@ public class NetworkChessManager : MonoBehaviour
 
     private IEnumerator WaitForBotMove(int sessionId)
     {
-        string url = $"{serverUrl}/api/sessions/{sessionId}";
+        string baseUrl = $"{serverUrl}/api/sessions/{sessionId}";
         bool finished = false;
 
         while (!finished)
         {
             yield return new WaitForSeconds(1.5f);
+            string url = $"{baseUrl}?_t={DateTime.UtcNow.Ticks}";
             using (UnityWebRequest request = UnityWebRequest.Get(url))
             {
+                request.SetRequestHeader("Cache-Control", "no-cache");
                 yield return request.SendWebRequest();
+
                 if (request.result == UnityWebRequest.Result.Success)
                 {
                     var response = JsonUtility.FromJson<SessionResponse>(request.downloadHandler.text);
@@ -216,7 +247,6 @@ public class NetworkChessManager : MonoBehaviour
                     if (response.session.status == "completed")
                     {
                         finished = true;
-                        if (gameTimer != null) gameTimer.StopTimer();
                         ShowResultPanel(response.session.result ?? "draw");
                         yield break;
                     }
