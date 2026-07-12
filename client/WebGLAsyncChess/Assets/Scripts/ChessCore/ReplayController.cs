@@ -1,14 +1,14 @@
-using System.Collections;
+п»їusing System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
 public class ReplayController : MonoBehaviour
 {
-    [Header("Компоненты")]
+    [Header("РљРѕРјРїРѕРЅРµРЅС‚С‹")]
     [SerializeField] private ChessGameController2D controller;
     [SerializeField] private Text bestTimeText;
 
-    [Header("Настройки")]
+    [Header("РќР°СЃС‚СЂРѕР№РєРё")]
     [SerializeField] private float moveDelay = 1.5f;
     [SerializeField] private string serverUrl = "https://webgl-async-ci-cd-production.up.railway.app";
     [SerializeField] private float replayScale = 0.35f;
@@ -18,6 +18,7 @@ public class ReplayController : MonoBehaviour
 
     private void Start()
     {
+        // РРЅРёС†РёР°Р»РёР·РёСЂСѓРµРј РґРѕСЃРєСѓ СЃСЂР°Р·Сѓ, РЅРѕ СЃРєСЂС‹РІР°РµРј РІРёР·СѓР°Р»СЊРЅРѕ
         if (controller != null)
         {
             controller.InitializeBoard();
@@ -36,7 +37,7 @@ public class ReplayController : MonoBehaviour
     {
         isReplaying = true;
 
-        // Уменьшаем доску
+        // РЈРјРµРЅСЊС€Р°РµРј РґРѕСЃРєСѓ
         transform.localScale = new Vector3(replayScale, replayScale, 1f);
         ShowAllRenderers();
 
@@ -47,7 +48,7 @@ public class ReplayController : MonoBehaviour
 
             if (request.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
             {
-                Debug.LogWarning("Не удалось загрузить лучшую партию");
+                Debug.LogWarning("РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ Р»СѓС‡С€СѓСЋ РїР°СЂС‚РёСЋ");
                 isReplaying = false;
                 yield break;
             }
@@ -55,7 +56,7 @@ public class ReplayController : MonoBehaviour
             var response = JsonUtility.FromJson<BestSessionResponse>(request.downloadHandler.text);
             if (response.session == null || response.session.moves == null || response.session.moves.Length == 0)
             {
-                if (bestTimeText != null) bestTimeText.text = "Нет записей";
+                if (bestTimeText != null) bestTimeText.text = "РќРµС‚ Р·Р°РїРёСЃРµР№";
                 isReplaying = false;
                 yield break;
             }
@@ -64,10 +65,10 @@ public class ReplayController : MonoBehaviour
             {
                 int mins = response.session.duration / 60;
                 int secs = response.session.duration % 60;
-                bestTimeText.text = $"Лучшая: {mins:D2}:{secs:D2}";
+                bestTimeText.text = $"Р›СѓС‡С€Р°СЏ: {mins:D2}:{secs:D2}";
             }
 
-            // Пересоздаём доску в уменьшенном масштабе
+            // РџРµСЂРµСЃРѕР·РґР°С‘Рј РґРѕСЃРєСѓ РІ СѓРјРµРЅСЊС€РµРЅРЅРѕРј РјР°СЃС€С‚Р°Р±Рµ
             controller.InitializeBoard();
 
             foreach (string moveStr in response.session.moves)
@@ -124,7 +125,7 @@ public class ReplayController : MonoBehaviour
         StopReplay();
         HideAllRenderers();
         transform.localScale = Vector3.one;
-        if (bestTimeText != null) bestTimeText.text = "Лучшая: --:--";
+        if (bestTimeText != null) bestTimeText.text = "Р›СѓС‡С€Р°СЏ: --:--";
     }
 
     [System.Serializable]
