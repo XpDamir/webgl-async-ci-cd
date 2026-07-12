@@ -213,9 +213,9 @@ public class NetworkChessManager : MonoBehaviour
     private IEnumerator PollSessionStateCoroutine(int sessionId)
     {
         string url = $"{serverUrl}/api/sessions/{sessionId}";
-        bool moveFound = false;
+        bool finished = false;
 
-        while (!moveFound)
+        while (!finished)
         {
             yield return new WaitForSeconds(2f);
             using (UnityWebRequest request = UnityWebRequest.Get(url))
@@ -225,23 +225,32 @@ public class NetworkChessManager : MonoBehaviour
                 if (request.result == UnityWebRequest.Result.Success)
                 {
                     var response = JsonUtility.FromJson<SessionResponse>(request.downloadHandler.text);
+
+                    // Проверяем завершение партии
+                    if (response.session.status == "completed")
+                    {
+                        finished = true;
+                        if (gameTimer != null) gameTimer.StopTimer();
+                        ShowResultPanel(response.session.result ?? "draw");
+                        yield break;
+                    }
+
+                    // Проверяем новый ход
                     if (response.session.moves != null && response.session.moves.Length > localMovesCount)
                     {
-                        moveFound = true;
+                        finished = true;
                         string botMoveStr = response.session.moves[response.session.moves.Length - 1];
                         ApplyServerMove(botMoveStr);
-                        if (response.session.status == "completed")
-                        {
-                            if (gameTimer != null) gameTimer.StopTimer();
-                            ShowResultPanel(response.session.result);
-                            isWaitingForBot = false;
-                            yield break;
-                        }
                     }
                 }
-                else { UpdateStatusText("Потеря связи..."); break; }
+                else
+                {
+                    UpdateStatusText("Потеря связи...");
+                    break;
+                }
             }
         }
+
         isWaitingForBot = false;
         UpdateUIState();
     }
