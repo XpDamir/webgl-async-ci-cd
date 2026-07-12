@@ -1,247 +1,110 @@
 import { Router } from 'express';
 import pool from '../db.js';
-import { Chess } from 'chess.js';
 
 const router = Router();
 
-/**
- * POST /api/sessions
- * Создать новую игровую сессию.
- */
+// POST /api/sessions
 router.post('/', async (req, res) => {
     try {
         const fen = req.body.fen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-
-        const result = await pool.query(
-            'INSERT INTO sessions (fen) VALUES ($1) RETURNING *',
-            [fen]
-        );
-        const session = result.rows[0];
-
-        res.status(201).json({
-            message: 'Сессия создана',
-            session,
-        });
+        const result = await pool.query('INSERT INTO sessions (fen) VALUES ($1) RETURNING *', [fen]);
+        res.status(201).json({ message: 'Сессия создана', session: result.rows[0] });
     } catch (error) {
         console.error('Ошибка создания сессии:', error);
-        res.status(500).json({
-            error: 'Не удалось создать сессию',
-            details: error.message,
-        });
+        res.status(500).json({ error: 'Не удалось создать сессию', details: error.message });
     }
 });
 
-/**
- * GET /api/sessions
- * Получить список всех сессий.
- */
+// GET /api/sessions
 router.get('/', async (req, res) => {
     try {
         const { status } = req.query;
-
         let query = 'SELECT * FROM sessions';
         const params = [];
-
-        if (status) {
-            query += ' WHERE status = $1';
-            params.push(status);
-        }
-
+        if (status) { query += ' WHERE status = $1'; params.push(status); }
         query += ' ORDER BY created_at DESC';
-
         const result = await pool.query(query, params);
-
-        res.json({
-            count: result.rows.length,
-            sessions: result.rows,
-        });
+        res.json({ count: result.rows.length, sessions: result.rows });
     } catch (error) {
         console.error('Ошибка получения сессий:', error);
-        res.status(500).json({
-            error: 'Не удалось получить сессии',
-            details: error.message,
-        });
+        res.status(500).json({ error: 'Не удалось получить сессии', details: error.message });
     }
 });
 
-/**
- * GET /api/sessions/last
- * Получить последнюю завершённую сессию.
- */
+// GET /api/sessions/last
 router.get('/last', async (req, res) => {
     try {
         const result = await pool.query(
             "SELECT * FROM sessions WHERE status = 'completed' ORDER BY completed_at DESC LIMIT 1"
         );
-
         if (result.rows.length === 0) {
-            return res.status(404).json({
-                message: 'Нет завершённых сессий',
-                session: null,
-            });
+            return res.status(404).json({ message: 'Нет завершённых сессий', session: null });
         }
-
-        res.json({
-            message: 'Последняя завершённая сессия',
-            session: result.rows[0],
-        });
+        res.json({ message: 'Последняя завершённая сессия', session: result.rows[0] });
     } catch (error) {
         console.error('Ошибка получения последней сессии:', error);
-        res.status(500).json({
-            error: 'Не удалось получить сессию',
-            details: error.message,
-        });
+        res.status(500).json({ error: 'Не удалось получить сессию', details: error.message });
     }
 });
 
-/**
- * GET /api/sessions/best
- * Получить завершённую партию с самой короткой длительностью.
- */
+// GET /api/sessions/best
 router.get('/best', async (req, res) => {
     try {
         const result = await pool.query(
-            `SELECT * FROM sessions 
-             WHERE status = 'completed' AND duration IS NOT NULL 
-             ORDER BY duration ASC 
-             LIMIT 1`
+            `SELECT * FROM sessions WHERE status = 'completed' AND duration IS NOT NULL ORDER BY duration ASC LIMIT 1`
         );
-
         if (result.rows.length === 0) {
-            return res.json({
-                message: 'Нет завершённых партий',
-                session: null,
-            });
+            return res.json({ message: 'Нет завершённых партий', session: null });
         }
-
-        res.json({
-            message: 'Лучшая партия',
-            session: result.rows[0],
-        });
+        res.json({ message: 'Лучшая партия', session: result.rows[0] });
     } catch (error) {
         console.error('Ошибка получения лучшей партии:', error);
-        res.status(500).json({
-            error: 'Не удалось получить лучшую партию',
-            details: error.message,
-        });
+        res.status(500).json({ error: 'Не удалось получить лучшую партию', details: error.message });
     }
 });
 
-/**
- * GET /api/sessions/:id/result
- * Получить результат партии.
- */
+// GET /api/sessions/:id/result
 router.get('/:id/result', async (req, res) => {
     try {
         const { id } = req.params;
-
-        const result = await pool.query(
-            'SELECT status, result, moves FROM sessions WHERE id = $1',
-            [id]
-        );
-
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Сессия не найдена' });
-        }
-
+        const result = await pool.query('SELECT status, result, moves FROM sessions WHERE id = $1', [id]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Сессия не найдена' });
         const session = result.rows[0];
-
-        res.json({
-            sessionId: parseInt(id),
-            status: session.status,
-            result: session.result,
-            totalMoves: session.moves ? session.moves.length : 0,
-        });
+        res.json({ sessionId: parseInt(id), status: session.status, result: session.result, totalMoves: session.moves ? session.moves.length : 0 });
     } catch (error) {
         console.error('Ошибка получения результата:', error);
         res.status(500).json({ error: 'Не удалось получить результат' });
     }
 });
 
-/**
- * GET /api/sessions/:id
- * Получить конкретную сессию по ID.
- */
+// GET /api/sessions/:id
 router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;
-
         const result = await pool.query('SELECT * FROM sessions WHERE id = $1', [id]);
-
-        if (result.rows.length === 0) {
-            return res.status(404).json({
-                error: 'Сессия не найдена',
-            });
-        }
-
-        res.json({
-            session: result.rows[0],
-        });
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Сессия не найдена' });
+        res.json({ session: result.rows[0] });
     } catch (error) {
         console.error('Ошибка получения сессии:', error);
-        res.status(500).json({
-            error: 'Не удалось получить сессию',
-            details: error.message,
-        });
+        res.status(500).json({ error: 'Не удалось получить сессию', details: error.message });
     }
 });
 
-/**
- * PUT /api/sessions/:id
- * Обновить сессию.
- */
+// PUT /api/sessions/:id
 router.put('/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { move, fen, status, result } = req.body;
 
         const current = await pool.query('SELECT * FROM sessions WHERE id = $1', [id]);
-
-        if (current.rows.length === 0) {
-            return res.status(404).json({ error: 'Сессия не найдена' });
-        }
+        if (current.rows.length === 0) return res.status(404).json({ error: 'Сессия не найдена' });
 
         const session = current.rows[0];
 
         let moves = session.moves || [];
-        if (move) {
-            moves = [...moves, move];
-        }
+        if (move) moves = [...moves, move];
 
-        let computedFen = session.fen;
-        if (move) {
-            try {
-                const chess = new Chess(session.fen);
-                const parts = move.split('-');
-                if (parts.length === 2) {
-                    const from = parts[0];
-                    let to = parts[1];
-                    const moveObj = { from, to };
-
-                    // Если есть promotion в конце to (например, "h8q")
-                    if (to.length === 3) {
-                        moveObj.to = to.substring(0, 2);
-                        moveObj.promotion = to.substring(2).toLowerCase();
-                    }
-
-                    // Если пешка идёт на последнюю горизонталь — превращаем в ферзя
-                    const piece = chess.get(from);
-                    if (piece && piece.type === 'p' && !moveObj.promotion) {
-                        const row = parseInt(moveObj.to[1]);
-                        if (row === 8 || row === 1) {
-                            moveObj.promotion = 'q';
-                        }
-                    }
-
-                    chess.move(moveObj);
-                    computedFen = chess.fen();
-                }
-            } catch (e) {
-                console.error('Ошибка вычисления FEN:', e.message);
-            }
-        }
-
-        const newFen = fen || computedFen;
+        const newFen = fen || session.fen;
         const newStatus = status || session.status;
         const newResult = result || session.result;
 
@@ -255,10 +118,7 @@ router.put('/:id', async (req, res) => {
         }
 
         const updateResult = await pool.query(
-            `UPDATE sessions 
-            SET moves = $1, fen = $2, status = $3, result = $4, completed_at = $5, duration = $6
-            WHERE id = $7 
-            RETURNING *`,
+            `UPDATE sessions SET moves = $1, fen = $2, status = $3, result = $4, completed_at = $5, duration = $6 WHERE id = $7 RETURNING *`,
             [moves, newFen, newStatus, newResult, completedAt, newDuration, id]
         );
 
@@ -269,125 +129,67 @@ router.put('/:id', async (req, res) => {
     }
 });
 
-/**
- * DELETE /api/sessions/:id
- * Удалить сессию по ID.
- */
+// DELETE /api/sessions/:id
 router.delete('/:id', async (req, res) => {
     try {
         const { id } = req.params;
-
-        const result = await pool.query(
-            'DELETE FROM sessions WHERE id = $1 RETURNING *',
-            [id]
-        );
-
-        if (result.rows.length === 0) {
-            return res.status(404).json({
-                error: 'Сессия не найдена',
-            });
-        }
-
-        res.json({
-            message: 'Сессия удалена',
-            session: result.rows[0],
-        });
+        const result = await pool.query('DELETE FROM sessions WHERE id = $1 RETURNING *', [id]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Сессия не найдена' });
+        res.json({ message: 'Сессия удалена', session: result.rows[0] });
     } catch (error) {
         console.error('Ошибка удаления сессии:', error);
-        res.status(500).json({
-            error: 'Не удалось удалить сессию',
-            details: error.message,
-        });
+        res.status(500).json({ error: 'Не удалось удалить сессию', details: error.message });
     }
 });
 
-/**
- * POST /api/sessions/:id/bot-move
- * Запросить асинхронный расчёт хода бота.
- */
+// POST /api/sessions/:id/bot-move
 router.post('/:id/bot-move', async (req, res) => {
     try {
         const { id } = req.params;
+        const current = await pool.query('SELECT * FROM sessions WHERE id = $1', [id]);
 
-        const current = await pool.query(
-            'SELECT * FROM sessions WHERE id = $1',
-            [id]
-        );
-
-        if (current.rows.length === 0) {
-            return res.status(404).json({
-                error: 'Сессия не найдена',
-            });
-        }
+        if (current.rows.length === 0) return res.status(404).json({ error: 'Сессия не найдена' });
 
         const session = current.rows[0];
 
         if (session.status !== 'active') {
-            return res.status(400).json({
-                error: 'Сессия уже завершена',
-                status: session.status,
-            });
+            return res.status(400).json({ error: 'Сессия уже завершена', status: session.status });
         }
 
         import('../services/bot.js').then(async (bot) => {
             try {
-                console.log(`Запущен асинхронный расчёт хода бота для сессии ${id}`);
+                console.log(`Бот: расчёт хода для сессии ${id}`);
+                const botResult = await bot.calculateBotMove(session.fen, session.moves || []);
 
-                const botResult = await bot.calculateBotMove(
-                    session.fen,
-                    session.moves || []
-                );
-
-                if (!botResult.move) {
-                    console.log(`Бот не смог сделать ход для сессии ${id}`);
+                if (!botResult || !botResult.move) {
+                    console.log(`Бот: нет хода для сессии ${id}`);
                     return;
                 }
-                const updatedMoves = [...(session.moves || []), botResult.move];
-                const gameState = bot.checkGameOver(
-                    botResult.fen,
-                    updatedMoves
-                );
 
-                const sessionForDuration = await pool.query('SELECT created_at FROM sessions WHERE id = $1', [id]);
+                const updatedMoves = [...(session.moves || []), botResult.move];
+                const gameState = bot.checkGameOver(botResult.fen);
+
                 let botDuration = null;
-                if (gameState.isOver && sessionForDuration.rows.length > 0) {
-                    const startTime = new Date(sessionForDuration.rows[0].created_at).getTime();
+                if (gameState.isOver) {
+                    const startTime = new Date(session.created_at).getTime();
                     botDuration = Math.floor((Date.now() - startTime) / 1000);
                 }
 
                 await pool.query(
-                    `UPDATE sessions 
-                    SET fen = $1, moves = $2, status = $3, result = $4, 
-                        completed_at = $5, duration = $6
-                    WHERE id = $7`,
-                    [
-                        botResult.fen,
-                        updatedMoves,
-                        gameState.isOver ? 'completed' : 'active',
-                        gameState.result,
-                        gameState.isOver ? new Date().toISOString() : null,
-                        botDuration,
-                        id,
-                    ]
+                    `UPDATE sessions SET fen = $1, moves = $2, status = $3, result = $4, completed_at = $5, duration = $6 WHERE id = $7`,
+                    [botResult.fen, updatedMoves, gameState.isOver ? 'completed' : 'active', gameState.result, gameState.isOver ? new Date().toISOString() : null, botDuration, id]
                 );
 
-                console.log(`Ход бота для сессии ${id} сохранён: ${botResult.move}`);
+                console.log(`Бот: ход ${botResult.move} сохранён для сессии ${id}`);
             } catch (error) {
-                console.error(`Ошибка при расчёте хода бота для сессии ${id}:`, error);
+                console.error(`Бот: ошибка для сессии ${id}:`, error.message);
             }
         });
 
-        res.json({
-            message: 'Бот думает над ходом',
-            status: 'processing',
-            sessionId: parseInt(id),
-        });
+        res.json({ message: 'Бот думает над ходом', status: 'processing', sessionId: parseInt(id) });
     } catch (error) {
         console.error('Ошибка при запросе хода бота:', error);
-        res.status(500).json({
-            error: 'Не удалось запустить расчёт хода бота',
-            details: error.message,
-        });
+        res.status(500).json({ error: 'Не удалось запустить расчёт хода бота', details: error.message });
     }
 });
 

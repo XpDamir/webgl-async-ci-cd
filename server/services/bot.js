@@ -1,24 +1,16 @@
 import { Chess } from 'chess.js';
 
-/**
- * Асинхронно рассчитывает ход бота.
- * Бот ВСЕГДА играет за чёрных.
- * 
- * @param {string} fen - Текущая позиция в FEN-формате
- * @param {string[]} previousMoves - Массив уже сделанных ходов
- * @returns {Promise<{move: string, fen: string}>} - Ход бота и новая позиция
- */
 export async function calculateBotMove(fen, previousMoves = []) {
     const thinkingTime = 1000 + Math.floor(Math.random() * 1000);
     console.log(`Бот анализирует позицию... (${thinkingTime / 1000} сек)`);
 
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         setTimeout(() => {
             try {
                 const chess = new Chess(fen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
 
                 if (chess.turn() === 'w') {
-                    console.log('Ошибка: бот вызван во время хода белых');
+                    console.log('Бот: сейчас ход белых, пропускаю');
                     resolve({ move: null, fen: chess.fen(), skipped: true });
                     return;
                 }
@@ -26,51 +18,46 @@ export async function calculateBotMove(fen, previousMoves = []) {
                 const legalMoves = chess.moves({ verbose: true });
 
                 if (legalMoves.length === 0) {
-                    console.log('У чёрных нет ходов');
-                    resolve({ move: null, fen: chess.fen(), gameOver: true });
+                    console.log('Бот: нет легальных ходов');
+                    const isCheckmate = chess.isCheckmate();
+                    resolve({
+                        move: null,
+                        fen: chess.fen(),
+                        gameOver: true,
+                        result: isCheckmate ? 'white_win' : 'draw',
+                    });
                     return;
                 }
 
                 const randomMove = legalMoves[Math.floor(Math.random() * legalMoves.length)];
 
-                // Форматируем ход с promotion
                 let formattedMove = `${randomMove.from}-${randomMove.to}`;
                 if (randomMove.promotion) {
                     formattedMove += randomMove.promotion;
                 }
 
                 chess.move(randomMove);
+                console.log(`Бот походил: ${formattedMove}`);
 
-                console.log(`Бот походил (чёрные): ${formattedMove}`);
-
-                resolve({
-                    move: formattedMove,
-                    fen: chess.fen(),
-                });
+                resolve({ move: formattedMove, fen: chess.fen() });
             } catch (error) {
-                console.error('Ошибка при расчёте хода бота:', error);
-                reject(error);
+                console.error('Ошибка бота:', error.message);
+                resolve({ move: null, fen: fen, error: error.message });
             }
         }, thinkingTime);
     });
 }
 
-/**
- * Проверяет состояние игры
- */
 export function checkGameOver(fen) {
     try {
         const chess = new Chess(fen);
         return {
             isOver: chess.isGameOver(),
-            result: chess.isCheckmate() ? 'checkmate' : chess.isDraw() ? 'draw' : null,
+            result: chess.isCheckmate() ? 'white_win' : chess.isDraw() ? 'draw' : null,
         };
     } catch {
         return { isOver: false, result: null };
     }
 }
 
-export default {
-    calculateBotMove,
-    checkGameOver,
-};
+export default { calculateBotMove, checkGameOver };
