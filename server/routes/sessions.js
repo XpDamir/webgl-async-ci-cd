@@ -7,7 +7,6 @@ const router = Router();
 /**
  * POST /api/sessions
  * Создать новую игровую сессию.
- * Тело запроса может содержать начальный FEN (опционально).
  */
 router.post('/', async (req, res) => {
     try {
@@ -35,7 +34,6 @@ router.post('/', async (req, res) => {
 /**
  * GET /api/sessions
  * Получить список всех сессий.
- * Поддерживает query-параметр ?status=active|completed
  */
 router.get('/', async (req, res) => {
     try {
@@ -69,7 +67,6 @@ router.get('/', async (req, res) => {
 /**
  * GET /api/sessions/last
  * Получить последнюю завершённую сессию.
- * Используется для параллельного повтора предыдущей партии.
  */
 router.get('/last', async (req, res) => {
     try {
@@ -85,6 +82,7 @@ router.get('/last', async (req, res) => {
         }
 
         res.json({
+            message: 'Последняя завершённая сессия',
             session: result.rows[0],
         });
     } catch (error) {
@@ -97,28 +95,33 @@ router.get('/last', async (req, res) => {
 });
 
 /**
- * GET /api/sessions/:id
- * Получить конкретную сессию по ID.
+ * GET /api/sessions/best
+ * Получить завершённую партию с самой короткой длительностью.
  */
-router.get('/:id', async (req, res) => {
+router.get('/best', async (req, res) => {
     try {
-        const { id } = req.params;
-
-        const result = await pool.query('SELECT * FROM sessions WHERE id = $1', [id]);
+        const result = await pool.query(
+            `SELECT * FROM sessions 
+             WHERE status = 'completed' AND duration IS NOT NULL 
+             ORDER BY duration ASC 
+             LIMIT 1`
+        );
 
         if (result.rows.length === 0) {
-            return res.status(404).json({
-                error: 'Сессия не найдена',
+            return res.json({
+                message: 'Нет завершённых партий',
+                session: null,
             });
         }
 
         res.json({
+            message: 'Лучшая партия',
             session: result.rows[0],
         });
     } catch (error) {
-        console.error('Ошибка получения сессии:', error);
+        console.error('Ошибка получения лучшей партии:', error);
         res.status(500).json({
-            error: 'Не удалось получить сессию',
+            error: 'Не удалось получить лучшую партию',
             details: error.message,
         });
     }
@@ -156,9 +159,36 @@ router.get('/:id/result', async (req, res) => {
 });
 
 /**
+ * GET /api/sessions/:id
+ * Получить конкретную сессию по ID.
+ */
+router.get('/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const result = await pool.query('SELECT * FROM sessions WHERE id = $1', [id]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                error: 'Сессия не найдена',
+            });
+        }
+
+        res.json({
+            session: result.rows[0],
+        });
+    } catch (error) {
+        console.error('Ошибка получения сессии:', error);
+        res.status(500).json({
+            error: 'Не удалось получить сессию',
+            details: error.message,
+        });
+    }
+});
+
+/**
  * PUT /api/sessions/:id
- * Обновить сессию (добавить ход, изменить статус, FEN).
- * Основной эндпоинт для записи ходов во время игры.
+ * Обновить сессию.
  */
 router.put('/:id', async (req, res) => {
     try {
@@ -178,7 +208,6 @@ router.put('/:id', async (req, res) => {
             moves = [...moves, move];
         }
 
-        // Вычисляем FEN через chess.js
         let computedFen = session.fen;
         if (move) {
             try {
@@ -198,16 +227,20 @@ router.put('/:id', async (req, res) => {
         const newResult = result || session.result;
 
         let completedAt = session.completed_at;
+        let newDuration = session.duration;
         if (newStatus === 'completed' && session.status !== 'completed') {
             completedAt = new Date().toISOString();
+            const startTime = new Date(session.created_at).getTime();
+            const endTime = new Date(completedAt).getTime();
+            newDuration = Math.floor((endTime - startTime) / 1000);
         }
 
         const updateResult = await pool.query(
             `UPDATE sessions 
-             SET moves = $1, fen = $2, status = $3, result = $4, completed_at = $5
-             WHERE id = $6 
-             RETURNING *`,
-            [moves, newFen, newStatus, newResult, completedAt, id]
+            SET moves = $1, fen = $2, status = $3, result = $4, completed_at = $5, duration = $6
+            WHERE id = $7 
+            RETURNING *`,
+            [moves, newFen, newStatus, newResult, completedAt, newDuration, id]
         );
 
         res.json({ message: 'Сессия обновлена', session: updateResult.rows[0] });
@@ -252,14 +285,11 @@ router.delete('/:id', async (req, res) => {
 /**
  * POST /api/sessions/:id/bot-move
  * Запросить асинхронный расчёт хода бота.
- * Бот "думает" в фоне, сервер сразу возвращает status: "processing".
- * Клиент должен опрашивать GET /api/sessions/:id для получения результата.
  */
 router.post('/:id/bot-move', async (req, res) => {
     try {
         const { id } = req.params;
 
-        // Получаем текущую сессию
         const current = await pool.query(
             'SELECT * FROM sessions WHERE id = $1',
             [id]
@@ -299,29 +329,32 @@ router.post('/:id/bot-move', async (req, res) => {
                     updatedMoves
                 );
 
+                const sessionForDuration = await pool.query('SELECT created_at FROM sessions WHERE id = $1', [id]);
+                let botDuration = null;
+                if (gameState.isOver && sessionForDuration.rows.length > 0) {
+                    const startTime = new Date(sessionForDuration.rows[0].created_at).getTime();
+                    botDuration = Math.floor((Date.now() - startTime) / 1000);
+                }
+
                 await pool.query(
                     `UPDATE sessions 
-                     SET fen = $1, moves = $2, status = $3, result = $4, 
-                         completed_at = $5
-                     WHERE id = $6`,
+                    SET fen = $1, moves = $2, status = $3, result = $4, 
+                        completed_at = $5, duration = $6
+                    WHERE id = $7`,
                     [
                         botResult.fen,
                         updatedMoves,
                         gameState.isOver ? 'completed' : 'active',
                         gameState.result,
                         gameState.isOver ? new Date().toISOString() : null,
+                        botDuration,
                         id,
                     ]
                 );
 
-                console.log(
-                    `Ход бота для сессии ${id} сохранён: ${botResult.move}`
-                );
+                console.log(`Ход бота для сессии ${id} сохранён: ${botResult.move}`);
             } catch (error) {
-                console.error(
-                    `Ошибка при расчёте хода бота для сессии ${id}:`,
-                    error
-                );
+                console.error(`Ошибка при расчёте хода бота для сессии ${id}:`, error);
             }
         });
 

@@ -25,6 +25,13 @@ public class NetworkChessManager : MonoBehaviour
     [Header("Coordinates")]
     [SerializeField] private BoardCoordinates boardCoordinates;
 
+    [Header("Таймер")]
+    [SerializeField] private GameTimer gameTimer;
+
+    [Header("Повтор")]
+    [SerializeField] private ReplayController replayController;
+
+
 
     private ChessGameController2D controller;
     private int? currentSessionId = null;
@@ -43,6 +50,7 @@ public class NetworkChessManager : MonoBehaviour
         if (newGameButton != null) newGameButton.onClick.AddListener(CreateNewGame);
         if (botMoveButton != null) botMoveButton.onClick.AddListener(RequestBotMove);
         if (menuButton != null) menuButton.onClick.AddListener(ReturnToMenu);
+        if (gameTimer != null) gameTimer.OnTimeUp += OnTimeUp;
 
         UpdateUIState();
     }
@@ -63,6 +71,14 @@ public class NetworkChessManager : MonoBehaviour
         if (gameUIPanel != null) gameUIPanel.SetActive(false);
         if (resultPanel != null) resultPanel.SetActive(false);
         if (boardCoordinates != null) boardCoordinates.Hide();
+        if (gameTimer != null) gameTimer.StopTimer();
+        if (replayController != null) replayController.Clear();
+    }
+
+    private void OnTimeUp()
+    {
+        UpdateStatusText("Время вышло! Поражение.");
+        ShowResultPanel("black_win");
     }
 
     private void ShowGamePanel()
@@ -108,6 +124,8 @@ public class NetworkChessManager : MonoBehaviour
         localMovesCount = 0;
         isWaitingForBot = false;
         if (boardCoordinates != null) boardCoordinates.Hide();
+        if (gameTimer != null) gameTimer.StopTimer();
+        if (replayController != null) replayController.Clear();
         ShowMenuPanel();
     }
 
@@ -141,6 +159,8 @@ public class NetworkChessManager : MonoBehaviour
 
                 RestartLocalGame();
                 controller.InitializeBoard();
+                if (gameTimer != null) gameTimer.StartTimer();
+                if (replayController != null) replayController.StartReplay();
                 if (boardCoordinates != null)
                 {
                     boardCoordinates.Generate();
@@ -277,6 +297,7 @@ public class NetworkChessManager : MonoBehaviour
 
                         if (response.session.status == "completed")
                         {
+                            if (gameTimer != null) gameTimer.StopTimer();
                             ShowResultPanel(response.session.result);
                             isWaitingForBot = false;
                             yield break;
