@@ -237,7 +237,6 @@ public class NetworkChessManager : MonoBehaviour
             string url = $"{baseUrl}?_t={DateTime.UtcNow.Ticks}";
             using (UnityWebRequest request = UnityWebRequest.Get(url))
             {
-                request.SetRequestHeader("Cache-Control", "no-cache");
                 yield return request.SendWebRequest();
 
                 if (request.result == UnityWebRequest.Result.Success)
