@@ -199,6 +199,10 @@ public class NetworkChessManager : MonoBehaviour
 
     private void HandleOnMoveExecuted(Move move)
     {
+        // Отправляем только ходы белых (игрока)
+        var piece = controller.Game.Board.GetPiece(move.To.X, move.To.Y);
+        if (piece.Color != PieceColor.White) return;
+
         if (currentSessionId.HasValue)
         {
             string moveString = ConvertMoveToString(move);
