@@ -94,7 +94,7 @@ router.get('/:id', async (req, res) => {
 router.put('/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const { move, fen, status, result } = req.body;
+        const { move, status, result } = req.body;
 
         const current = await pool.query('SELECT * FROM sessions WHERE id = $1', [id]);
         if (current.rows.length === 0) return res.status(404).json({ error: 'Сессия не найдена' });
@@ -104,7 +104,35 @@ router.put('/:id', async (req, res) => {
         let moves = session.moves || [];
         if (move) moves = [...moves, move];
 
-        const newFen = fen || session.fen;
+        // Сервер сам вычисляет FEN
+        let computedFen = session.fen;
+        if (move) {
+            try {
+                const { Chess } = await import('chess.js');
+                const chess = new Chess(session.fen);
+                const parts = move.split('-');
+                if (parts.length === 2) {
+                    const from = parts[0];
+                    let to = parts[1];
+                    const moveObj = { from, to };
+                    if (to.length === 3) {
+                        moveObj.to = to.substring(0, 2);
+                        moveObj.promotion = to.substring(2).toLowerCase();
+                    }
+                    const piece = chess.get(from);
+                    if (piece && piece.type === 'p' && !moveObj.promotion) {
+                        const row = parseInt(moveObj.to[1]);
+                        if (row === 8 || row === 1) moveObj.promotion = 'q';
+                    }
+                    chess.move(moveObj);
+                    computedFen = chess.fen();
+                }
+            } catch (e) {
+                console.error('Ошибка хода игрока:', e.message);
+                return res.status(400).json({ error: 'Нелегальный ход', details: e.message });
+            }
+        }
+
         const newStatus = status || session.status;
         const newResult = result || session.result;
 
@@ -112,17 +140,39 @@ router.put('/:id', async (req, res) => {
         let newDuration = session.duration;
         if (newStatus === 'completed' && session.status !== 'completed') {
             completedAt = new Date().toISOString();
-            const startTime = new Date(session.created_at).getTime();
-            const endTime = new Date(completedAt).getTime();
-            newDuration = Math.floor((endTime - startTime) / 1000);
+            newDuration = Math.floor((new Date(completedAt) - new Date(session.created_at)) / 1000);
         }
 
         const updateResult = await pool.query(
             `UPDATE sessions SET moves = $1, fen = $2, status = $3, result = $4, completed_at = $5, duration = $6 WHERE id = $7 RETURNING *`,
-            [moves, newFen, newStatus, newResult, completedAt, newDuration, id]
+            [moves, computedFen, newStatus, newResult, completedAt, newDuration, id]
         );
 
-        res.json({ message: 'Сессия обновлена', session: updateResult.rows[0] });
+        // Автоматически запускаем бота, если ход белых и игра не завершена
+        if (computedFen.includes(' b ') && newStatus !== 'completed') {
+            // Запускаем бота асинхронно
+            import('../services/bot.js').then(async (bot) => {
+                try {
+                    const botResult = await bot.calculateBotMove(computedFen, moves);
+                    if (botResult && botResult.move) {
+                        const botMoves = [...moves, botResult.move];
+                        const gameState = bot.checkGameOver(botResult.fen);
+                        let botDuration = null;
+                        if (gameState.isOver) {
+                            botDuration = Math.floor((Date.now() - new Date(session.created_at)) / 1000);
+                        }
+                        await pool.query(
+                            `UPDATE sessions SET fen = $1, moves = $2, status = $3, result = $4, completed_at = $5, duration = $6 WHERE id = $7`,
+                            [botResult.fen, botMoves, gameState.isOver ? 'completed' : 'active', gameState.result, gameState.isOver ? new Date().toISOString() : null, botDuration, id]
+                        );
+                    }
+                } catch (err) {
+                    console.error('Ошибка авто-бота:', err.message);
+                }
+            });
+        }
+
+        res.json({ message: 'Ход принят', session: updateResult.rows[0] });
     } catch (error) {
         console.error('Ошибка обновления сессии:', error);
         res.status(500).json({ error: 'Не удалось обновить сессию', details: error.message });

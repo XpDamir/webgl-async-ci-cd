@@ -17,6 +17,8 @@ public class ChessInput : MonoBehaviour
     {
         if (controller == null || controller.Game == null) return;
 
+        if (NetworkChessManager.IsWaitingForBotStatic) return;
+
         if (controller.Game.TryMove(x, y))
         {
             controller.spawner.SpawnAll();

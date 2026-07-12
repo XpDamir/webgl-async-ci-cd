@@ -17,7 +17,6 @@ public class NetworkChessManager : MonoBehaviour
 
     [Header("UI References")]
     [SerializeField] private Button newGameButton;
-    [SerializeField] private Button botMoveButton;
     [SerializeField] private Button menuButton;
     [SerializeField] private Text statusText;
     [SerializeField] private Text resultText;
@@ -36,13 +35,14 @@ public class NetworkChessManager : MonoBehaviour
     private int localMovesCount = 0;
     private bool isWaitingForBot = false;
 
+    public static bool IsWaitingForBotStatic { get; private set; } = false;
+
     private void Awake() { controller = GetComponent<ChessGameController2D>(); }
 
     private void Start()
     {
         ShowMenuPanel();
         if (newGameButton != null) newGameButton.onClick.AddListener(CreateNewGame);
-        if (botMoveButton != null) botMoveButton.onClick.AddListener(RequestBotMove);
         if (menuButton != null) menuButton.onClick.AddListener(ReturnToMenu);
         if (gameTimer != null) gameTimer.OnTimeUp += OnTimeUp;
         UpdateUIState();
@@ -77,6 +77,7 @@ public class NetworkChessManager : MonoBehaviour
 
     private void ShowResultPanel(string result)
     {
+        UpdateWaitingState(false);
         if (gameUIPanel != null) gameUIPanel.SetActive(false);
         if (resultPanel != null) resultPanel.SetActive(true);
         if (resultText != null)
@@ -95,7 +96,7 @@ public class NetworkChessManager : MonoBehaviour
     {
         currentSessionId = null;
         localMovesCount = 0;
-        isWaitingForBot = false;
+        UpdateWaitingState(false);
         if (boardCoordinates != null) boardCoordinates.Hide();
         if (gameTimer != null) gameTimer.StopTimer();
         if (replayController != null) replayController.Clear();
@@ -152,6 +153,8 @@ public class NetworkChessManager : MonoBehaviour
 
     private void HandleOnMoveExecuted(Move move)
     {
+        if (isWaitingForBot) return;
+
         var piece = controller.Game.Board.GetPiece(move.To.X, move.To.Y);
         if (piece.Color != PieceColor.White) return;
 
@@ -164,9 +167,12 @@ public class NetworkChessManager : MonoBehaviour
 
     private IEnumerator SendMoveCoroutine(int sessionId, string moveStr)
     {
+        // Блокируем доску немедленно
+        UpdateWaitingState(true);
+        UpdateUIState();
+
         string url = $"{serverUrl}/api/sessions/{sessionId}";
-        string currentFen = GameStateToFen(controller.Game);
-        string jsonPayload = JsonUtility.ToJson(new PutMoveRequest { move = moveStr, fen = currentFen });
+        string jsonPayload = JsonUtility.ToJson(new PutMoveRequest { move = moveStr });
         byte[] bodyData = System.Text.Encoding.UTF8.GetBytes(jsonPayload);
 
         using (UnityWebRequest request = new UnityWebRequest(url, "PUT"))
@@ -176,57 +182,37 @@ public class NetworkChessManager : MonoBehaviour
             request.SetRequestHeader("Content-Type", "application/json");
             yield return request.SendWebRequest();
 
-            if (request.result == UnityWebRequest.Result.Success) { localMovesCount++; UpdateUIState(); }
-            else UpdateStatusText("Ошибка синхронизации хода.");
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                localMovesCount++;
+                UpdateUIState();
+                UpdateStatusText("Бот думает...");
+                StartCoroutine(WaitForBotMove(sessionId));
+            }
+            else
+            {
+                UpdateStatusText("Ошибка синхронизации хода.");
+                UpdateWaitingState(false);
+                UpdateUIState();
+            }
         }
     }
 
-    #endregion
-
-    #region Bot Move Handling
-
-    public void RequestBotMove()
-    {
-        if (currentSessionId.HasValue && !isWaitingForBot)
-            StartCoroutine(RequestBotMoveCoroutine(currentSessionId.Value));
-    }
-
-    private IEnumerator RequestBotMoveCoroutine(int sessionId)
-    {
-        isWaitingForBot = true;
-        UpdateUIState();
-        UpdateStatusText("Бот думает...");
-
-        string url = $"{serverUrl}/api/sessions/{sessionId}/bot-move";
-        using (UnityWebRequest request = new UnityWebRequest(url, "POST"))
-        {
-            request.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes("{}"));
-            request.downloadHandler = new DownloadHandlerBuffer();
-            request.SetRequestHeader("Content-Type", "application/json");
-            yield return request.SendWebRequest();
-
-            if (request.result == UnityWebRequest.Result.Success) StartCoroutine(PollSessionStateCoroutine(sessionId));
-            else { UpdateStatusText("Бот недоступен."); isWaitingForBot = false; UpdateUIState(); }
-        }
-    }
-
-    private IEnumerator PollSessionStateCoroutine(int sessionId)
+    private IEnumerator WaitForBotMove(int sessionId)
     {
         string url = $"{serverUrl}/api/sessions/{sessionId}";
         bool finished = false;
 
         while (!finished)
         {
-            yield return new WaitForSeconds(2f);
+            yield return new WaitForSeconds(1.5f);
             using (UnityWebRequest request = UnityWebRequest.Get(url))
             {
                 yield return request.SendWebRequest();
-
                 if (request.result == UnityWebRequest.Result.Success)
                 {
                     var response = JsonUtility.FromJson<SessionResponse>(request.downloadHandler.text);
 
-                    // Проверяем завершение партии
                     if (response.session.status == "completed")
                     {
                         finished = true;
@@ -235,7 +221,6 @@ public class NetworkChessManager : MonoBehaviour
                         yield break;
                     }
 
-                    // Проверяем новый ход
                     if (response.session.moves != null && response.session.moves.Length > localMovesCount)
                     {
                         finished = true;
@@ -246,18 +231,23 @@ public class NetworkChessManager : MonoBehaviour
                 else
                 {
                     UpdateStatusText("Потеря связи...");
-                    break;
+                    finished = true;
                 }
             }
         }
 
-        isWaitingForBot = false;
+        UpdateWaitingState(false);
         UpdateUIState();
     }
 
     private void ApplyServerMove(string moveStr)
     {
-        if (string.IsNullOrEmpty(moveStr) || moveStr == "null") { UpdateStatusText("Бот пропустил ход."); localMovesCount++; return; }
+        if (string.IsNullOrEmpty(moveStr) || moveStr == "null")
+        {
+            UpdateStatusText("Бот пропустил ход.");
+            localMovesCount++;
+            return;
+        }
 
         Move move = ConvertStringToMove(moveStr);
         var pieceAtStart = controller.Game.Board.GetPiece(move.From.X, move.From.Y);
@@ -279,43 +269,21 @@ public class NetworkChessManager : MonoBehaviour
 
     #region Helpers
 
+    private void UpdateWaitingState(bool waiting)
+    {
+        isWaitingForBot = waiting;
+        IsWaitingForBotStatic = waiting;
+    }
+
     private void UpdateUIState()
     {
         if (newGameButton != null) newGameButton.interactable = !isWaitingForBot;
-        if (botMoveButton != null)
-        {
-            bool isBlackTurn = controller.Game != null && controller.Game.CurrentTurn == PieceColor.Black;
-            botMoveButton.interactable = currentSessionId.HasValue && !isWaitingForBot && isBlackTurn;
-        }
     }
 
-    private void UpdateStatusText(string text) { if (statusText != null) statusText.text = text; Debug.Log($"[NetworkChess] {text}"); }
-
-    private string GameStateToFen(GameState game)
+    private void UpdateStatusText(string text)
     {
-        if (game == null || game.Board == null) return "";
-        string fen = "";
-        for (int y = 7; y >= 0; y--)
-        {
-            int empty = 0;
-            for (int x = 0; x < 8; x++)
-            {
-                var piece = game.Board.GetPiece(x, y);
-                if (piece.IsEmpty) { empty++; }
-                else
-                {
-                    if (empty > 0) { fen += empty; empty = 0; }
-                    char c = 'p';
-                    switch (piece.Type) { case PieceType.Knight: c = 'n'; break; case PieceType.Bishop: c = 'b'; break; case PieceType.Rook: c = 'r'; break; case PieceType.Queen: c = 'q'; break; case PieceType.King: c = 'k'; break; }
-                    fen += piece.Color == PieceColor.White ? char.ToUpper(c) : c;
-                }
-            }
-            if (empty > 0) fen += empty;
-            if (y > 0) fen += "/";
-        }
-        fen += game.CurrentTurn == PieceColor.White ? " w " : " b ";
-        fen += "KQkq - 0 1";
-        return fen;
+        if (statusText != null) statusText.text = text;
+        Debug.Log($"[NetworkChess] {text}");
     }
 
     private string ConvertMoveToString(Move move)
@@ -338,10 +306,19 @@ public class NetworkChessManager : MonoBehaviour
     {
         string clean = moveStr;
         PieceType? promo = null;
-        if (clean.Length > 5) { char last = clean[clean.Length - 1]; if (last >= 'a' && last <= 'z') { switch (last) { case 'q': promo = PieceType.Queen; break; case 'r': promo = PieceType.Rook; break; case 'b': promo = PieceType.Bishop; break; case 'n': promo = PieceType.Knight; break; } clean = clean.Substring(0, clean.Length - 1); } }
+        if (clean.Length > 5)
+        {
+            char last = clean[clean.Length - 1];
+            if (last >= 'a' && last <= 'z')
+            {
+                switch (last) { case 'q': promo = PieceType.Queen; break; case 'r': promo = PieceType.Rook; break; case 'b': promo = PieceType.Bishop; break; case 'n': promo = PieceType.Knight; break; }
+                clean = clean.Substring(0, clean.Length - 1);
+            }
+        }
 
         string[] p = clean.Split('-');
-        if (p.Length != 2 || p[0].Length < 2 || p[1].Length < 2) return new Move(new BoardPosition(0, 0), new BoardPosition(0, 0));
+        if (p.Length != 2 || p[0].Length < 2 || p[1].Length < 2)
+            return new Move(new BoardPosition(0, 0), new BoardPosition(0, 0));
 
         return new Move(new BoardPosition(p[0][0] - 'a', p[0][1] - '1'), new BoardPosition(p[1][0] - 'a', p[1][1] - '1'), promo);
     }
@@ -351,6 +328,6 @@ public class NetworkChessManager : MonoBehaviour
     #region JSON
     [Serializable] public class SessionData { public int id; public string status; public string result; public string[] moves; }
     [Serializable] public class SessionResponse { public string message; public SessionData session; }
-    [Serializable] public class PutMoveRequest { public string move; public string fen; }
+    [Serializable] public class PutMoveRequest { public string move; }
     #endregion
 }
