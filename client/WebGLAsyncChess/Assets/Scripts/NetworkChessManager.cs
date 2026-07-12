@@ -386,7 +386,20 @@ public class NetworkChessManager : MonoBehaviour
 
     private string ConvertMoveToString(Move move)
     {
-        return $"{(char)('a' + move.From.X)}{(char)('1' + move.From.Y)}-{(char)('a' + move.To.X)}{(char)('1' + move.To.Y)}";
+        string result = $"{(char)('a' + move.From.X)}{(char)('1' + move.From.Y)}-{(char)('a' + move.To.X)}{(char)('1' + move.To.Y)}";
+
+        if (move.Promotion.HasValue && move.Promotion.Value != PieceType.None)
+        {
+            switch (move.Promotion.Value)
+            {
+                case PieceType.Queen: result += "q"; break;
+                case PieceType.Rook: result += "r"; break;
+                case PieceType.Bishop: result += "b"; break;
+                case PieceType.Knight: result += "n"; break;
+            }
+        }
+
+        return result;
     }
 
     private Move ConvertStringToMove(string moveStr)

@@ -59,7 +59,15 @@ namespace ChessCore
         public void ExecuteLocalMove(Move move)
         {
             var piece = Board.GetPiece(move.From.X, move.From.Y);
-            Board.SetPiece(move.To.X, move.To.Y, piece);
+
+            // Превращение пешки
+            Piece movingPiece = piece;
+            if (move.Promotion.HasValue && move.Promotion.Value != PieceType.None)
+            {
+                movingPiece = new Piece(move.Promotion.Value, piece.Color);
+            }
+
+            Board.SetPiece(move.To.X, move.To.Y, movingPiece);
             Board.SetPiece(move.From.X, move.From.Y, Piece.Empty);
 
             CurrentTurn = (CurrentTurn == PieceColor.White) ? PieceColor.Black : PieceColor.White;

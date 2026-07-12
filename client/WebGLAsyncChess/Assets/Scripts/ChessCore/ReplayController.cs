@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using ChessCore;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -83,7 +84,22 @@ public class ReplayController : MonoBehaviour
 
     private void ApplyMove(string moveStr)
     {
-        string[] parts = moveStr.Split('-');
+        // Убираем символ promotion из строки, если есть
+        string cleanMove = moveStr;
+        string promotion = null;
+
+        // Если ход длиннее 5 символов (например, "g7-h8q")
+        if (moveStr.Length > 5)
+        {
+            char lastChar = moveStr[moveStr.Length - 1];
+            if (lastChar >= 'a' && lastChar <= 'z')
+            {
+                promotion = lastChar.ToString();
+                cleanMove = moveStr.Substring(0, moveStr.Length - 1);
+            }
+        }
+
+        string[] parts = cleanMove.Split('-');
         if (parts.Length != 2) return;
 
         int fromX = parts[0][0] - 'a';
@@ -91,10 +107,30 @@ public class ReplayController : MonoBehaviour
         int toX = parts[1][0] - 'a';
         int toY = parts[1][1] - '1';
 
-        controller.Game.SelectPiece(fromX, fromY);
-        if (controller.Game.TryMove(toX, toY))
+        // Если есть превращение — меняем фигуру вручную
+        if (promotion != null)
         {
+            PieceType promoType = PieceType.Queen;
+            switch (promotion)
+            {
+                case "q": promoType = PieceType.Queen; break;
+                case "r": promoType = PieceType.Rook; break;
+                case "b": promoType = PieceType.Bishop; break;
+                case "n": promoType = PieceType.Knight; break;
+            }
+
+            var piece = controller.Game.Board.GetPiece(fromX, fromY);
+            controller.Game.Board.SetPiece(toX, toY, new Piece(promoType, piece.Color));
+            controller.Game.Board.SetPiece(fromX, fromY, Piece.Empty);
             controller.spawner.SpawnAll();
+        }
+        else
+        {
+            controller.Game.SelectPiece(fromX, fromY);
+            if (controller.Game.TryMove(toX, toY))
+            {
+                controller.spawner.SpawnAll();
+            }
         }
     }
 

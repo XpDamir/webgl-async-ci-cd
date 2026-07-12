@@ -32,9 +32,15 @@ export async function calculateBotMove(fen, previousMoves = []) {
                 }
 
                 const randomMove = legalMoves[Math.floor(Math.random() * legalMoves.length)];
+
+                // Форматируем ход с promotion
+                let formattedMove = `${randomMove.from}-${randomMove.to}`;
+                if (randomMove.promotion) {
+                    formattedMove += randomMove.promotion;
+                }
+
                 chess.move(randomMove);
 
-                const formattedMove = `${randomMove.from}-${randomMove.to}`;
                 console.log(`Бот походил (чёрные): ${formattedMove}`);
 
                 resolve({

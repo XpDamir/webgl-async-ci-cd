@@ -77,9 +77,6 @@ namespace ChessCore
             if (toY == promotionRow)
             {
                 moves.Add(new Move(new BoardPosition(fromX, fromY), new BoardPosition(toX, toY), PieceType.Queen));
-                moves.Add(new Move(new BoardPosition(fromX, fromY), new BoardPosition(toX, toY), PieceType.Rook));
-                moves.Add(new Move(new BoardPosition(fromX, fromY), new BoardPosition(toX, toY), PieceType.Bishop));
-                moves.Add(new Move(new BoardPosition(fromX, fromY), new BoardPosition(toX, toY), PieceType.Knight));
             }
             else
             {

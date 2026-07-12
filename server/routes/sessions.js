@@ -214,7 +214,26 @@ router.put('/:id', async (req, res) => {
                 const chess = new Chess(session.fen);
                 const parts = move.split('-');
                 if (parts.length === 2) {
-                    chess.move({ from: parts[0], to: parts[1] });
+                    const from = parts[0];
+                    let to = parts[1];
+                    const moveObj = { from, to };
+
+                    // Если есть promotion в конце to (например, "h8q")
+                    if (to.length === 3) {
+                        moveObj.to = to.substring(0, 2);
+                        moveObj.promotion = to.substring(2).toLowerCase();
+                    }
+
+                    // Если пешка идёт на последнюю горизонталь — превращаем в ферзя
+                    const piece = chess.get(from);
+                    if (piece && piece.type === 'p' && !moveObj.promotion) {
+                        const row = parseInt(moveObj.to[1]);
+                        if (row === 8 || row === 1) {
+                            moveObj.promotion = 'q';
+                        }
+                    }
+
+                    chess.move(moveObj);
                     computedFen = chess.fen();
                 }
             } catch (e) {
