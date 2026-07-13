@@ -135,7 +135,6 @@ GameObject:
   - component: {fileID: 17574555}
   - component: {fileID: 17574554}
   - component: {fileID: 17574558}
-  - component: {fileID: 17574559}
   - component: {fileID: 17574560}
   - component: {fileID: 17574561}
   m_Layer: 0
@@ -217,30 +216,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   controller: {fileID: 17574554}
---- !u!114 &17574559
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 17574553}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b75263647f00c034b911181dd073464e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  serverUrl: https://webgl-async-ci-cd-production.up.railway.app
-  menuPanel: {fileID: 1549127865}
-  gameUIPanel: {fileID: 1346215159}
-  resultPanel: {fileID: 953683525}
-  newGameButton: {fileID: 384057548}
-  menuButton: {fileID: 1014032677}
-  statusText: {fileID: 165794485}
-  resultText: {fileID: 1374204182}
-  boardObject: {fileID: 17574553}
-  boardCoordinates: {fileID: 17574560}
-  gameTimer: {fileID: 17574561}
-  replayController: {fileID: 1907501673}
 --- !u!114 &17574560
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -901,6 +876,63 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 953683525}
   m_CullTransparentMesh: 1
+--- !u!1 &954246450
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 954246452}
+  - component: {fileID: 954246451}
+  m_Layer: 0
+  m_Name: NetworkChessManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &954246451
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 954246450}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b75263647f00c034b911181dd073464e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  serverUrl: https://webgl-async-ci-cd-production.up.railway.app
+  menuPanel: {fileID: 1549127865}
+  gameUIPanel: {fileID: 1346215159}
+  resultPanel: {fileID: 953683525}
+  newGameButton: {fileID: 384057548}
+  menuButton: {fileID: 1014032677}
+  statusText: {fileID: 165794485}
+  resultText: {fileID: 1374204182}
+  controller: {fileID: 17574554}
+  boardObject: {fileID: 17574553}
+  boardCoordinates: {fileID: 17574560}
+  gameTimer: {fileID: 17574561}
+  replayController: {fileID: 1907501673}
+--- !u!4 &954246452
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 954246450}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 8.475158, y: 1.4125365, z: -4.45}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1014032675
 GameObject:
   m_ObjectHideFlags: 0
@@ -1376,7 +1408,6 @@ GameObject:
   - component: {fileID: 1907501677}
   - component: {fileID: 1907501676}
   - component: {fileID: 1907501675}
-  - component: {fileID: 1907501674}
   - component: {fileID: 1907501673}
   m_Layer: 0
   m_Name: Replay Chess
@@ -1399,30 +1430,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   controller: {fileID: 1907501675}
   bestTimeText: {fileID: 744525583}
+  parentCanvas: {fileID: 0}
+  replayPosition: {x: 8, y: -1, z: 0}
   moveDelay: 1.5
   serverUrl: https://webgl-async-ci-cd-production.up.railway.app
   replayScale: 0.3
---- !u!114 &1907501674
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1907501672}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 00a4be251c20842459630974aef4865d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  letterOffsetY: 0.65
-  numberOffsetX: 0.65
-  letterShiftX: -0.5
-  letterShiftY: -0.2
-  numberShiftX: -0.2
-  numberShiftY: -0.5
-  fontSize: 25
-  characterSize: 0.15
-  font: {fileID: 0}
+  cornerOffset: {x: 1, y: 1}
 --- !u!114 &1907501675
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1467,25 +1480,21 @@ MonoBehaviour:
   whiteColor: {r: 1, g: 1, b: 1, a: 1}
   blackColor: {r: 0, g: 0, b: 0, a: 1}
   highlightColor: {r: 0, g: 1, b: 0, a: 1}
---- !u!224 &1907501678
-RectTransform:
+--- !u!4 &1907501678
+Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1907501672}
+  serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 1}
+  m_LocalPosition: {x: 8, y: -1, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 1910720732}
+  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 1, y: 0}
-  m_AnchorMax: {x: 1, y: 0}
-  m_AnchoredPosition: {x: -5, y: 5}
-  m_SizeDelta: {x: 100, y: 100}
-  m_Pivot: {x: 1, y: 0}
 --- !u!1 &1910720728
 GameObject:
   m_ObjectHideFlags: 0
@@ -1583,7 +1592,6 @@ RectTransform:
   - {fileID: 953683526}
   - {fileID: 1549127866}
   - {fileID: 1346215160}
-  - {fileID: 1907501678}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -1799,6 +1807,8 @@ SceneRoots:
   m_Roots:
   - {fileID: 1115977957}
   - {fileID: 17574557}
+  - {fileID: 1907501678}
   - {fileID: 1996924628}
   - {fileID: 430631222}
   - {fileID: 1910720732}
+  - {fileID: 954246452}

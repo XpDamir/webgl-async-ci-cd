@@ -17,6 +17,7 @@ public class PieceSpawner2D : MonoBehaviour
             piecesContainer = go.transform;
             piecesContainer.SetParent(this.transform);
             piecesContainer.localPosition = Vector3.zero;
+            piecesContainer.localScale = Vector3.one;
         }
 
         ClearAll();
@@ -30,14 +31,20 @@ public class PieceSpawner2D : MonoBehaviour
                 var piece = Game.Board.GetPiece(x, y);
                 if (piece.IsEmpty) continue;
 
-                var obj = Instantiate(piecePrefab, new Vector3(x, y, -1), Quaternion.identity, piecesContainer);
+                var obj = Instantiate(piecePrefab, piecesContainer);
+                obj.transform.localPosition = new Vector3(x, y, -1);
 
                 var view = obj.GetComponent<PieceView>();
                 if (view != null)
                 {
                     view.X = x;
                     view.Y = y;
-                    view.SetPiece(piece);
+                    // Явно задаём спрайт
+                    if (sprites != null)
+                    {
+                        var rend = obj.GetComponent<SpriteRenderer>();
+                        if (rend != null) rend.sprite = sprites.GetSprite(piece);
+                    }
                 }
             }
         }
