@@ -15,30 +15,33 @@ public class ReplayController : MonoBehaviour
     [SerializeField] private float replayScale = 0.35f;
 
     private bool isReplaying = false;
-    private bool isInitialized = false;
+    private Vector3 originalPosition;
+    private Vector3 originalScale;
+
+    private void Awake()
+    {
+        originalPosition = transform.localPosition;
+        originalScale = transform.localScale;
+        gameObject.SetActive(false);
+    }
 
     private void Start()
     {
-        // Инициализируем доску сразу, но скрываем визуально
-        if (controller != null)
-        {
-            controller.InitializeBoard();
-        }
+        if (controller != null) controller.InitializeBoard();
         HideAllRenderers();
-        isInitialized = true;
     }
 
     public void StartReplay()
     {
-        if (!isReplaying)
-            StartCoroutine(FetchAndReplayCoroutine());
+        gameObject.SetActive(true);
+        transform.localPosition = originalPosition;
+        transform.localScale = originalScale;
+        if (!isReplaying) StartCoroutine(FetchAndReplayCoroutine());
     }
 
     private IEnumerator FetchAndReplayCoroutine()
     {
         isReplaying = true;
-
-        // Уменьшаем доску
         transform.localScale = new Vector3(replayScale, replayScale, 1f);
         ShowAllRenderers();
 
@@ -49,7 +52,6 @@ public class ReplayController : MonoBehaviour
 
             if (request.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
             {
-                Debug.LogWarning("Не удалось загрузить лучшую партию");
                 isReplaying = false;
                 yield break;
             }
@@ -69,7 +71,6 @@ public class ReplayController : MonoBehaviour
                 bestTimeText.text = $"Лучшая: {mins:D2}:{secs:D2}";
             }
 
-            // Пересоздаём доску в уменьшенном масштабе
             controller.InitializeBoard();
 
             foreach (string moveStr in response.session.moves)
@@ -84,11 +85,9 @@ public class ReplayController : MonoBehaviour
 
     private void ApplyMove(string moveStr)
     {
-        // Убираем символ promotion из строки, если есть
         string cleanMove = moveStr;
         string promotion = null;
 
-        // Если ход длиннее 5 символов (например, "g7-h8q")
         if (moveStr.Length > 5)
         {
             char lastChar = moveStr[moveStr.Length - 1];
@@ -107,17 +106,10 @@ public class ReplayController : MonoBehaviour
         int toX = parts[1][0] - 'a';
         int toY = parts[1][1] - '1';
 
-        // Если есть превращение — меняем фигуру вручную
         if (promotion != null)
         {
             PieceType promoType = PieceType.Queen;
-            switch (promotion)
-            {
-                case "q": promoType = PieceType.Queen; break;
-                case "r": promoType = PieceType.Rook; break;
-                case "b": promoType = PieceType.Bishop; break;
-                case "n": promoType = PieceType.Knight; break;
-            }
+            switch (promotion) { case "q": promoType = PieceType.Queen; break; case "r": promoType = PieceType.Rook; break; case "b": promoType = PieceType.Bishop; break; case "n": promoType = PieceType.Knight; break; }
 
             var piece = controller.Game.Board.GetPiece(fromX, fromY);
             controller.Game.Board.SetPiece(toX, toY, new Piece(promoType, piece.Color));
@@ -127,57 +119,31 @@ public class ReplayController : MonoBehaviour
         else
         {
             controller.Game.SelectPiece(fromX, fromY);
-            if (controller.Game.TryMove(toX, toY))
-            {
-                controller.spawner.SpawnAll();
-            }
+            if (controller.Game.TryMove(toX, toY)) controller.spawner.SpawnAll();
         }
     }
 
     private void HideAllRenderers()
     {
-        foreach (var rend in GetComponentsInChildren<Renderer>(true))
-        {
-            rend.enabled = false;
-        }
+        foreach (var rend in GetComponentsInChildren<Renderer>(true)) rend.enabled = false;
     }
 
     private void ShowAllRenderers()
     {
-        foreach (var rend in GetComponentsInChildren<Renderer>(true))
-        {
-            rend.enabled = true;
-        }
-    }
-
-    public void StopReplay()
-    {
-        StopAllCoroutines();
-        isReplaying = false;
+        foreach (var rend in GetComponentsInChildren<Renderer>(true)) rend.enabled = true;
     }
 
     public void Clear()
     {
-        StopReplay();
+        StopAllCoroutines();
+        isReplaying = false;
         HideAllRenderers();
-        transform.localScale = Vector3.one;
+        transform.localPosition = originalPosition;
+        transform.localScale = originalScale;
+        gameObject.SetActive(false);
         if (bestTimeText != null) bestTimeText.text = "Лучшая: --:--";
     }
 
-    [System.Serializable]
-    private class BestSessionResponse
-    {
-        public string message;
-        public SessionData session;
-    }
-
-    [System.Serializable]
-    private class SessionData
-    {
-        public int id;
-        public string status;
-        public string result;
-        public string[] moves;
-        public int duration;
-    }
+    [System.Serializable] private class BestSessionResponse { public string message; public SessionData session; }
+    [System.Serializable] private class SessionData { public int id; public string status; public string result; public string[] moves; public int duration; }
 }

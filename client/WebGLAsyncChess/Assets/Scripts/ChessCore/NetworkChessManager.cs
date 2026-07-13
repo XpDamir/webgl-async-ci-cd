@@ -21,6 +21,9 @@ public class NetworkChessManager : MonoBehaviour
     [SerializeField] private Text statusText;
     [SerializeField] private Text resultText;
 
+    [Header("Board")]
+    [SerializeField] private GameObject boardObject;
+
     [Header("Coordinates")]
     [SerializeField] private BoardCoordinates boardCoordinates;
 
@@ -51,7 +54,6 @@ public class NetworkChessManager : MonoBehaviour
         if (newGameButton != null) newGameButton.onClick.AddListener(CreateNewGame);
         if (menuButton != null) menuButton.onClick.AddListener(ReturnToMenu);
         if (gameTimer != null) gameTimer.OnTimeUp += OnTimeUp;
-        UpdateUIState();
     }
 
     private void OnDestroy()
@@ -64,28 +66,35 @@ public class NetworkChessManager : MonoBehaviour
 
     private void ShowMenuPanel()
     {
+        StopAllCoroutines();
+        UpdateWaitingState(false);
         if (menuPanel != null) menuPanel.SetActive(true);
         if (gameUIPanel != null) gameUIPanel.SetActive(false);
         if (resultPanel != null) resultPanel.SetActive(false);
         if (boardCoordinates != null) boardCoordinates.Hide();
         if (gameTimer != null) gameTimer.StopTimer();
         if (replayController != null) replayController.Clear();
+        if (boardObject != null) boardObject.SetActive(false);
     }
 
-    private void OnTimeUp() { UpdateStatusText("Время вышло! Поражение."); ShowResultPanel("black_win"); }
+    private void OnTimeUp() { ShowResultPanel("black_win"); }
 
     private void ShowGamePanel()
     {
         if (menuPanel != null) menuPanel.SetActive(false);
+        if (boardObject != null) boardObject.SetActive(true);
         if (gameUIPanel != null) gameUIPanel.SetActive(true);
         if (resultPanel != null) resultPanel.SetActive(false);
     }
 
     private void ShowResultPanel(string result)
     {
+        Debug.Log($"[NetworkChess] ShowResultPanel: {result}");
+        StopAllCoroutines();
         UpdateWaitingState(false);
         if (gameTimer != null) gameTimer.StopTimer();
         if (gameUIPanel != null) gameUIPanel.SetActive(false);
+        if (boardObject != null) boardObject.SetActive(false); // Скрываем доску
         if (resultPanel != null) resultPanel.SetActive(true);
 
         if (resultText != null)
@@ -98,7 +107,7 @@ public class NetworkChessManager : MonoBehaviour
                     resultText.color = Color.green;
                     break;
                 case "black_win":
-                    resultText.text = "Поражение! Мат белым.";
+                    resultText.text = "Поражение!";
                     resultText.color = Color.red;
                     break;
                 case "draw":
@@ -115,12 +124,14 @@ public class NetworkChessManager : MonoBehaviour
 
     public void ReturnToMenu()
     {
+        StopAllCoroutines();
         currentSessionId = null;
         localMovesCount = 0;
         UpdateWaitingState(false);
         if (boardCoordinates != null) boardCoordinates.Hide();
         if (gameTimer != null) gameTimer.StopTimer();
         if (replayController != null) replayController.Clear();
+        if (boardObject != null) boardObject.SetActive(false);
         ShowMenuPanel();
     }
 
@@ -209,7 +220,6 @@ public class NetworkChessManager : MonoBehaviour
 
                 if (putResponse.session.status == "completed")
                 {
-                    if (gameTimer != null) gameTimer.StopTimer();
                     ShowResultPanel(putResponse.session.result ?? "draw");
                     yield break;
                 }
