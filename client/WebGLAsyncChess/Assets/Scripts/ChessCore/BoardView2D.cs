@@ -33,7 +33,8 @@ public class BoardView2D : MonoBehaviour
         {
             for (int y = 0; y < 8; y++)
             {
-                GameObject obj = Instantiate(tilePrefab, new Vector3(x, y, 0), Quaternion.identity, tilesContainer);
+                GameObject obj = Instantiate(tilePrefab, tilesContainer);
+                obj.transform.localPosition = new Vector3(x, y, 0);
                 obj.name = $"Tile_{x}_{y}";
 
                 ChessTile tile = obj.GetComponent<ChessTile>();

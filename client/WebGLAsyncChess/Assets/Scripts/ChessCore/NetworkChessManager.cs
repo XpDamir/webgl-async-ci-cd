@@ -21,6 +21,9 @@ public class NetworkChessManager : MonoBehaviour
     [SerializeField] private Text statusText;
     [SerializeField] private Text resultText;
 
+    [Header("Controller")]
+    [SerializeField] private ChessGameController2D controller;
+
     [Header("Board")]
     [SerializeField] private GameObject boardObject;
 
@@ -33,7 +36,6 @@ public class NetworkChessManager : MonoBehaviour
     [Header("Повтор")]
     [SerializeField] private ReplayController replayController;
 
-    private ChessGameController2D controller;
     private int? currentSessionId = null;
     private int localMovesCount = 0;
     private bool isWaitingForBot = false;
@@ -42,7 +44,6 @@ public class NetworkChessManager : MonoBehaviour
 
     private void Awake()
     {
-        controller = GetComponent<ChessGameController2D>();
 #if UNITY_EDITOR
         serverUrl = "http://localhost:5000";
 #endif

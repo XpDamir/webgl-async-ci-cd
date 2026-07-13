@@ -1,32 +1,27 @@
-﻿using ChessCore;
-using System.Collections;
+﻿using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
+using ChessCore;
 
 public class ReplayController : MonoBehaviour
 {
     [Header("Компоненты")]
     [SerializeField] private ChessGameController2D controller;
     [SerializeField] private Text bestTimeText;
+    [SerializeField] private Vector3 replayPosition = new Vector3(5, -3, 0);
 
     [Header("Настройки")]
     [SerializeField] private float moveDelay = 1.5f;
     [SerializeField] private string serverUrl = "https://webgl-async-ci-cd-production.up.railway.app";
     [SerializeField] private float replayScale = 0.35f;
+    [SerializeField] private Vector2 cornerOffset = new Vector2(50, 50);
 
     private bool isReplaying = false;
-    private Vector3 originalPosition;
-    private Vector3 originalScale;
-
-    private void Awake()
-    {
-        originalPosition = transform.localPosition;
-        originalScale = transform.localScale;
-        gameObject.SetActive(false);
-    }
+    private Camera mainCamera;
 
     private void Start()
     {
+        mainCamera = Camera.main;
         if (controller != null) controller.InitializeBoard();
         HideAllRenderers();
     }
@@ -34,16 +29,13 @@ public class ReplayController : MonoBehaviour
     public void StartReplay()
     {
         gameObject.SetActive(true);
-        transform.localPosition = originalPosition;
-        transform.localScale = originalScale;
         if (!isReplaying) StartCoroutine(FetchAndReplayCoroutine());
     }
 
     private IEnumerator FetchAndReplayCoroutine()
     {
+        transform.position = replayPosition;
         isReplaying = true;
-        transform.localScale = new Vector3(replayScale, replayScale, 1f);
-        ShowAllRenderers();
 
         string url = $"{serverUrl}/api/sessions/best";
         using (var request = UnityEngine.Networking.UnityWebRequest.Get(url))
@@ -64,14 +56,26 @@ public class ReplayController : MonoBehaviour
                 yield break;
             }
 
+            // Позиционируем в правый нижний угол
+            //SnapToCorner();
+
+            // Генерируем доску
+            controller.InitializeBoard();
+
+            // Масштабируем дочерние контейнеры
+            foreach (Transform child in transform)
+            {
+                child.localScale = new Vector3(replayScale, replayScale, 1f);
+            }
+
+            ShowAllRenderers();
+
             if (bestTimeText != null && response.session.duration > 0)
             {
                 int mins = response.session.duration / 60;
                 int secs = response.session.duration % 60;
                 bestTimeText.text = $"Лучшая: {mins:D2}:{secs:D2}";
             }
-
-            controller.InitializeBoard();
 
             foreach (string moveStr in response.session.moves)
             {
@@ -82,6 +86,27 @@ public class ReplayController : MonoBehaviour
 
         isReplaying = false;
     }
+
+    //private void SnapToCorner()
+    //{
+    //    if (mainCamera == null) mainCamera = Camera.main;
+    //    if (mainCamera == null) return;
+
+    //    // Размер доски в мировых единицах (8 клеток * масштаб)
+    //    float boardWorldSize = 8f * replayScale;
+
+    //    // Правый нижний угол экрана в мировых координатах
+    //    Vector3 bottomRightScreen = new Vector3(Screen.width - cornerOffset.x, cornerOffset.y, 10);
+    //    Vector3 worldPos = mainCamera.ScreenToWorldPoint(bottomRightScreen);
+
+    //    // Смещаем на половину размера доски, чтобы она была внутри экрана
+    //    worldPos.x -= boardWorldSize / 2f;
+    //    worldPos.y += boardWorldSize / 2f;
+    //    worldPos.z = 0;
+
+    //    transform.position = worldPos;
+    //    transform.localScale = Vector3.one;
+    //}
 
     private void ApplyMove(string moveStr)
     {
@@ -106,20 +131,25 @@ public class ReplayController : MonoBehaviour
         int toX = parts[1][0] - 'a';
         int toY = parts[1][1] - '1';
 
+        PieceType? promoType = null;
         if (promotion != null)
         {
-            PieceType promoType = PieceType.Queen;
-            switch (promotion) { case "q": promoType = PieceType.Queen; break; case "r": promoType = PieceType.Rook; break; case "b": promoType = PieceType.Bishop; break; case "n": promoType = PieceType.Knight; break; }
-
-            var piece = controller.Game.Board.GetPiece(fromX, fromY);
-            controller.Game.Board.SetPiece(toX, toY, new Piece(promoType, piece.Color));
-            controller.Game.Board.SetPiece(fromX, fromY, Piece.Empty);
-            controller.spawner.SpawnAll();
+            switch (promotion)
+            {
+                case "q": promoType = PieceType.Queen; break;
+                case "r": promoType = PieceType.Rook; break;
+                case "b": promoType = PieceType.Bishop; break;
+                case "n": promoType = PieceType.Knight; break;
+            }
         }
-        else
+
+        var move = new Move(new BoardPosition(fromX, fromY), new BoardPosition(toX, toY), promoType);
+        controller.Game.ExecuteLocalMove(move);
+        controller.spawner.SpawnAll();
+
+        foreach (Transform child in transform)
         {
-            controller.Game.SelectPiece(fromX, fromY);
-            if (controller.Game.TryMove(toX, toY)) controller.spawner.SpawnAll();
+            child.localScale = new Vector3(replayScale, replayScale, 1f);
         }
     }
 
@@ -138,10 +168,9 @@ public class ReplayController : MonoBehaviour
         StopAllCoroutines();
         isReplaying = false;
         HideAllRenderers();
-        transform.localPosition = originalPosition;
-        transform.localScale = originalScale;
-        gameObject.SetActive(false);
+        transform.position = Vector3.zero;
         if (bestTimeText != null) bestTimeText.text = "Лучшая: --:--";
+        gameObject.SetActive(false);
     }
 
     [System.Serializable] private class BestSessionResponse { public string message; public SessionData session; }
